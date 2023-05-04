@@ -18,10 +18,12 @@ def airy_ensq_energy(p):
     return pix_fraction
 
 # Calculate the energy in a square of half-width p (in um)
-# centered on an Gaussian PSF with standard deviation sigma.
-def gaussian_ensq_energy(p, sigma):
-    arg = p / np.sqrt(2) / sigma
-    pix_fraction = special.erf(arg) ** 2
+# centered on an Gaussian PSF with x and y standard deviations
+# sigma_x and sigma_y, respectively.
+def gaussian_ensq_energy(p, sigma_x, sigma_y):
+    arg_x = p / np.sqrt(2) / sigma_x
+    arg_y = p / np.sqrt(2) / sigma_y
+    pix_fraction = special.erf(arg_x) * special.erg(arg_y)
     return pix_fraction
 
 
@@ -41,7 +43,7 @@ def multivariate_gaussian(num_pix, resolution, pix_size, mu, Sigma):
     arg = np.einsum('...k,kl,...l->...', pos-mu, Sigma_inv, pos-mu)
     # Determine the fraction of the light that hits the entire subarray
     array_p = num_pix / 2 * pix_size
-    subarray_fraction = gaussian_ensq_energy(array_p, Sigma[0][0])
+    subarray_fraction = gaussian_ensq_energy(array_p, Sigma[0][0], Sigma[1][1])
     # Normalize the PSF to have a total amplitude of 1
     gaussian = np.exp(-arg / 2)
     normalize = subarray_fraction / gaussian.sum()

@@ -8,17 +8,13 @@ Sensor
 Telescope
 Observatory
 """
-import matplotlib.pyplot as plt
+
 import os
-from scipy import special
-from scipy import integrate
 import numpy as np
 import pysynphot as S
 from RedshiftLookup import RedshiftLookup
 from constants import *
 from PSFs import *
-
-pysynphot_path = os.environ['PYSYN_CDBS']
 
 
 class Sensor(object):
@@ -254,10 +250,10 @@ class Observatory(object):
         pivot_wave = self.lambda_pivot(spectrum)
         if self.psf_sigma is not None:
             p = self.sensor.pix_size / 2
-            pix_fraction = gaussian_ensq_energy(p, self.psf_sigma)
+            pix_fraction = gaussian_ensq_energy(p, self.psf_sigma, self.psf_sigma)
         else:
             p = (np.pi * self.sensor.pix_size /
-                   (2 * self.telescope.f_num * pivot_wave * 10**-4))
+                 (2 * self.telescope.f_num * pivot_wave * 10**-4))
             pix_fraction = airy_ensq_energy(p)
         
         signal = self.tot_signal(spectrum) * pix_fraction
@@ -292,7 +288,6 @@ class Observatory(object):
         noise = np.sqrt(signal + self.single_pix_noise() ** 2)
         exposure_snr = signal / noise
         stack_snr = exposure_snr * np.sqrt(self.num_exposures)
-        print(signal, noise, stack_snr)
         return stack_snr
 
     def limiting_dist(self, spectrum, initial_dist):
@@ -388,10 +383,10 @@ class Observatory(object):
         # Simulate the PSF on a subarray of 9x9 pixels, with a resolution of 
         # 101x101 points per pixel.
         if self.psf_sigma is not None:
-            base_grid = multivariate_gaussian(9, 101, self.sensor.pix_size,
-                                              [0,0], [[self.psf_sigma,0],[0,self.psf_sigma]])
+            base_grid = gaussian_psf(9, 101, self.sensor.pix_size, [0, 0],
+                                     [[self.psf_sigma, 0], [0, self.psf_sigma]])
         else:
-            base_grid = airy_disk(9, 101, self.sensor.pix_size, [0,0], self.telescope.f_num,
+            base_grid = airy_disk(9, 101, self.sensor.pix_size, [0, 0], self.telescope.f_num,
                                   self.lambda_pivot(spectrum))
         base_grid *= tot_signal
         # Sum the signals within each pixel
@@ -455,5 +450,4 @@ if __name__ == '__main__':
 
     flat_spec = S.FlatSpectrum(25, fluxunits='abmag')
     flat_spec.convert('fnu')
-    tess_geo_obs.single_pix_snr(flat_spec)
-    test, ap = tess_geo_obs.snr(flat_spec)
+    tess_geo_obs.snr(flat_spec)
