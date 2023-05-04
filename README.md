@@ -1,6 +1,6 @@
 Provides an interface to estimate the photometric performance of TESS-GEO.
 
-Requires pysynphot, matplotlib, numpy, and scipy.
+Requires tkinter, pysynphot, matplotlib, numpy, and scipy.
 
 CPL 05/04/23
 
