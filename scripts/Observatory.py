@@ -377,28 +377,84 @@ class Observatory(object):
             i += 1
         return mag
 
-    def snr(self, spectrum):
+    def intensity_grid(self, spectrum, pos=[0, 0]):
+        """The intensity across a 9x9 pixel subarray with sub-pixel resolution
+        
+        Parameters
+        ----------
+        spectrum: pysynphot.spectrum object
+            The spectrum for which to calculate the intensity grid.
+        pos: array-like (default [0, 0])
+            The centroid position of the source on the subarray, in
+            microns, with [0,0] representing the center of the
+            central pixel.
+        """
         tot_signal = self.tot_signal(spectrum)
-        noise_per_pix = self.single_pix_noise()
         # Simulate the PSF on a subarray of 9x9 pixels, with a resolution of 
         # 101x101 points per pixel.
         if self.psf_sigma is not None:
-            base_grid = gaussian_psf(9, 101, self.sensor.pix_size, [0, 0],
-                                     [[self.psf_sigma, 0], [0, self.psf_sigma]])
+            psf_grid = gaussian_psf(11, 101, self.sensor.pix_size, pos,
+                                     [[self.psf_sigma ** 2, 0], [0, self.psf_sigma ** 2]])
         else:
-            base_grid = airy_disk(9, 101, self.sensor.pix_size, [0, 0], self.telescope.f_num,
+            psf_grid = airy_disk(11, 101, self.sensor.pix_size, pos, self.telescope.f_num,
                                   self.lambda_pivot(spectrum))
-        base_grid *= tot_signal
+        intensity_grid = psf_grid * tot_signal
+        return intensity_grid
+
+    def obs_grid(self, spectrum, pos=[0, 0]):
+        """The intensity (in electrons) across a 9x9 pixel subarray
+        
+        Parameters
+        ----------
+        spectrum: pysynphot.spectrum object
+            The spectrum for which to calculate the intensity grid.
+        pos: array-like (default [0, 0])
+            The centroid position of the source on the subarray, in
+            microns, with [0,0] representing the center of the
+            central pixel.
+        """
+        base_grid = self.intensity_grid(spectrum, pos)
         # Sum the signals within each pixel
-        temp_grid = base_grid.reshape((9, 101, 9, 101))
+        temp_grid = base_grid.reshape((11, 101, 11, 101))
         pixel_grid = temp_grid.sum(axis=(1, 3))
+        return pixel_grid
+
+    def obs_signal(self, aper, intensity_grid):
+        # Sum the signals within each pixel
+        temp_grid = intensity_grid.reshape((11, 101, 11, 101))
+        pixel_grid = temp_grid.sum(axis=(1, 3))
+        n_aper = aper.sum()
+        obs_grid = pixel_grid * aper
+        avg_source_sig = obs_grid.sum()
+        avg_bkg_sig = n_aper * self.bkg_per_pix()
+        avg_dark_sig = n_aper * self.sensor.dark_current * self.exposure_time
+        raw_sig = (np.random.poisson(avg_source_sig + avg_bkg_sig + avg_dark_sig)
+                      + n_aper * np.random.normal(scale=self.sensor.read_noise))
+        subracted_sig = raw_sig - avg_bkg_sig - avg_dark_sig
+        return subracted_sig
+
+    def snr(self, spectrum, pos=[0, 0]):
+        """The snr of a given spectrum, using the optimal aperture.
+        
+        Parameters
+        ----------
+        spectrum: pysynphot.spectrum object
+            The spectrum for which to calculate the snr.
+        pos: array-like (default [0, 0])
+            The centroid position of the source on the subarray, in
+            microns, with [0,0] representing the center of the
+            central pixel.
+        """
+        noise_per_pix = self.single_pix_noise()
+        pixel_grid = self.obs_grid(spectrum, pos)
         # Determine the optimal aperture for the image
-        optimal_ap, n_aper = optimal_aperature(pixel_grid, noise_per_pix)
+        optimal_ap = optimal_aperture(pixel_grid, noise_per_pix)
+        n_aper = optimal_ap.sum()
         obs_grid = pixel_grid * optimal_ap
         signal = obs_grid.sum()
         noise =  np.sqrt(signal + (n_aper * noise_per_pix) ** 2)
         snr = signal / noise * np.sqrt(self.num_exposures)
-        return snr, obs_grid
+        return snr
 
 def blackbody_spec(temp, dist, l_bol):
     """Returns a blackbody spectrum with the desired properties.
@@ -446,7 +502,7 @@ if __name__ == '__main__':
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass,
-                               exposure_time=300, num_exposures=3)
+                               exposure_time=300, num_exposures=3, psf_sigma=1.6)
 
     flat_spec = S.FlatSpectrum(25, fluxunits='abmag')
     flat_spec.convert('fnu')

@@ -23,11 +23,11 @@ def airy_ensq_energy(p):
 def gaussian_ensq_energy(p, sigma_x, sigma_y):
     arg_x = p / np.sqrt(2) / sigma_x
     arg_y = p / np.sqrt(2) / sigma_y
-    pix_fraction = special.erf(arg_x) * special.erg(arg_y)
+    pix_fraction = special.erf(arg_x) * special.erf(arg_y)
     return pix_fraction
 
 
-def multivariate_gaussian(num_pix, resolution, pix_size, mu, Sigma):
+def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     """Return an x-y grid with a Gaussian disk evaluated at each point."""
     grid_points = num_pix * resolution
     x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
@@ -75,7 +75,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
 
 # Finding the aperture that maximizes the SNR for an image. Uses the
 # algorithm detailed in Tam Nguyen's thesis.
-def optimal_aperature(prf_grid, noise_per_pix):
+def optimal_aperture(prf_grid, noise_per_pix):
     """The optimal aperture for maximizing S/N.
 
     Parameters
@@ -100,8 +100,7 @@ def optimal_aperature(prf_grid, noise_per_pix):
         func_grid[imax, jmax] = -1
 
         signal = signal + Nmax
-        shot_noise = np.sqrt(signal)
-        noise = np.sqrt(shot_noise + ((n_aper + 1) * noise_per_pix) ** 2)
+        noise = np.sqrt(signal + ((n_aper + 1) * noise_per_pix) ** 2)
         snr = signal / noise
 
         if snr > snr_max:
@@ -111,4 +110,4 @@ def optimal_aperature(prf_grid, noise_per_pix):
         else:
             break
 
-    return aperture_grid, n_aper
+    return aperture_grid

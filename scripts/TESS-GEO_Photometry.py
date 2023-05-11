@@ -1,10 +1,12 @@
 # Chris Layden
 
+import os
 import tkinter as tk
 import pysynphot as S
 from Observatory import Sensor, Telescope, Observatory, blackbody_spec
-from Instruments import imx455, imx487, mono_tele_v10, mono_tele_v8
+from Instruments import imx455, imx487, mono_tele_v10, mono_tele_v11
 
+data_folder = os.path.dirname(__file__) + '/../data/'
 
 class MyGUI:
     def __init__(self):
@@ -66,7 +68,7 @@ class MyGUI:
         self.telescope_menu_header = tk.Label(self.root, text="Or Choose a Telescope",
                                       font=["Arial", 16, "bold"])
         self.telescope_menu_header.grid(row=6, column=2, columnspan=2, padx=padx, pady=pady)
-        self.telescope_options = ["MonoTele V10 (Visible)", "MonoTele V8 (UV)"]
+        self.telescope_options = ["MonoTele V10 (Visible)", "MonoTele V11 (UV)"]
         self.telescope_default = tk.StringVar()
         self.telescope_default.set(None)
         self.telescope_menu = tk.OptionMenu(self.root, self.telescope_default, *self.telescope_options)
@@ -94,7 +96,8 @@ class MyGUI:
         self.observing_labels.append(tk.Label(self.root, text="Select Filter"))
         self.observing_labels[-1].grid(row=14, column=0, padx=padx, pady=pady)
         self.filter_options = ["None", "Johnson U", "Johnson V",
-                               "Johnson B", "Johnson R", "Johnson I"]
+                               "Johnson B", "Johnson R", "Johnson I",
+                               "UV (200-300 nm)"]
         self.filter_default = tk.StringVar()
         self.filter_default.set("None")
         self.filter_menu = tk.OptionMenu(self.root, self.filter_default, *self.filter_options)
@@ -163,7 +166,7 @@ class MyGUI:
         if self.telescope_default.get() == self.telescope_options[0]:
             self.telescope = mono_tele_v10
         elif self.telescope_default.get() == self.telescope_options[1]:
-            self.telescope = mono_tele_v8
+            self.telescope = mono_tele_v11
         self.telescope_vars[0].set(self.telescope.diam)
         self.telescope_vars[1].set(self.telescope.f_num)
         self.telescope_vars[2].set(self.telescope.bandpass)
@@ -183,10 +186,12 @@ class MyGUI:
         limiting_snr = self.observing_vars[2].get()
         if self.filter_default.get() == "None":
             filter_bp = 1
-        else:
+        elif self.filter_default.get()[0] == "J":
             filter_name = self.filter_default.get()
             filter_str = "johnson," + filter_name[-1].lower()
             filter_bp = S.ObsBandpass(filter_str)
+        elif self.filter_default.get() == "UV (200-300 nm)":
+            filter_bp = S.FileBandpass(data_folder + "uv_200_270.fits")
         observatory = Observatory(sensor, telescope, exposure_time=exposure_time,
                                   num_exposures=num_exposures, limiting_s_n=limiting_snr,
                                   filter_bandpass=filter_bp)
@@ -196,6 +201,11 @@ class MyGUI:
         observatory = self.set_obs()
         flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
         flat_spec.convert('fnu')
+        # Remove old label, if it exists.
+        try:
+            self.lim_mag_label.destroy()
+        except:
+            pass
         try:
             limiting_mag = observatory.limiting_mag()
             self.lim_mag_label = tk.Label(self.root, text="Limiting Magnitude: " + 
@@ -221,7 +231,12 @@ class MyGUI:
             raise("No spectrum specified")
         
         observatory = self.set_obs()
-        snr, ap = observatory.snr(spectrum)
+        snr = observatory.snr(spectrum)
+        # Remove old label, if it exists, and place the new one.
+        try:
+            self.snr_label.destroy()
+        except:
+            pass
         self.snr_label = tk.Label(self.root, text="Observed SNR: " + 
                                         format(snr,'4.3f'), fg='red', bg='white')
         self.snr_label.grid(row=9, column=4, columnspan=2, padx=10, pady=5)

@@ -19,5 +19,5 @@ imx487 = Sensor(pix_size=3.76, read_noise=3, dark_current=5**-4,
 v10_bandpass = S.UniformTransmission(0.693)
 mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
 
-v8_bandpass = S.UniformTransmission(0.693)
-mono_tele_v8 = Telescope(diam=20, f_num=5, bandpass=v8_bandpass)
+v11_bandpass = S.UniformTransmission(0.54)
+mono_tele_v11 = Telescope(diam=28.5, f_num=5, bandpass=v11_bandpass)
