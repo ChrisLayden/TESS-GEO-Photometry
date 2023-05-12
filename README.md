@@ -6,14 +6,14 @@ CPL 05/04/23
 
 Steps to make pysynphot operational:
 1) Follow instructions at https://pysynphot.readthedocs.io/en/latest/
-to install pysynphot with pip or conda and set your PYSYN_CDBS variable
+to install pysynphot with pip or conda
 2) Download just the first two sets of data files
 (http://ssb.stsci.edu/trds/tarfiles/synphot1.tar.gz and
 http://ssb.stsci.edu/trds/tarfiles/synphot2.tar.gz); unpack these
 to some directory /my/dir
 3) set
 ```
-export PYSYN_CDBS=/mr/dir/grp/redcat/trds
+export PYSYN_CDBS=/my/dir/grp/redcat/trds
 ```
 
 To open the interface, do

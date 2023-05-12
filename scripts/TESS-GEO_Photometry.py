@@ -25,7 +25,8 @@ class MyGUI:
 
         self.sensor_labels = []
         sensor_label_names = ["Pixel Size (um)", "Read Noise (e-/pix)", 
-                              "Dark Current (e-/pix/s)", "Quantum Efficiency"]
+                              "Dark Current (e-/pix/s)", "Quantum Efficiency",
+                              "Full Well Capacity"]
         self.sensor_entries = []
         self.sensor_vars = []
         for i in range(len(sensor_label_names)):
@@ -94,6 +95,9 @@ class MyGUI:
             self.observing_entries[i].grid(row=i+11, column=1, padx=padx, pady=pady)
 
         self.observing_labels.append(tk.Label(self.root, text="Select Filter"))
+        self.observing_vars[0].set(300)
+        self.observing_vars[1].set(3)
+        self.observing_vars[2].set(5)
         self.observing_labels[-1].grid(row=14, column=0, padx=padx, pady=pady)
         self.filter_options = ["None", "Johnson U", "Johnson V",
                                "Johnson B", "Johnson R", "Johnson I",
@@ -105,6 +109,9 @@ class MyGUI:
 
         self.lim_mag_button = tk.Button(self.root, text="Calculate limiting magnitude", command=self.limiting_mag)
         self.lim_mag_button.grid(row=15, column=0, columnspan=2, padx=padx, pady=pady)
+
+        self.lim_mag_button = tk.Button(self.root, text="Calculate saturating magnitude", command=self.saturating_mag)
+        self.lim_mag_button.grid(row=17, column=0, columnspan=2, padx=padx, pady=pady)
 
         # Set a spectrum to observe
         self.spectrum_header = tk.Label(self.root, text="Spectrum to Observe",
@@ -159,6 +166,7 @@ class MyGUI:
         self.sensor_vars[0].set(self.sensor.pix_size)
         self.sensor_vars[1].set(self.sensor.read_noise)
         self.sensor_vars[2].set(self.sensor.dark_current)
+        self.sensor_vars[4].set(self.sensor.full_well)
         self.sensor_entries[3].delete(0,10)
         self.sensor_entries[3].insert(0,"ARRAY")
 
@@ -172,20 +180,20 @@ class MyGUI:
         self.telescope_vars[2].set(self.telescope.bandpass)
 
     def set_obs(self):
-        # self.sensor_entries[3].config({"background": "Black"})
         try:
             sensor_vars = [i.get() for i in self.sensor_vars]
+            sensor_vars[3] = S.UniformTransmission(sensor_vars[3])
+            sensor = Sensor(*sensor_vars)
         except tk.TclError:
-            sensor_vars = [self.sensor_vars[0].get(), self.sensor_vars[1].get(),
-                           self.sensor_vars[2].get(), self.sensor.qe]
-        sensor = Sensor(*sensor_vars)
+            sensor = self.sensor
         telescope_vars = [i.get() for i in self.telescope_vars]
+        telescope_vars[2] = S.UniformTransmission(telescope_vars[2])
         telescope = Telescope(*telescope_vars)
         exposure_time = self.observing_vars[0].get()
         num_exposures = self.observing_vars[1].get()
         limiting_snr = self.observing_vars[2].get()
         if self.filter_default.get() == "None":
-            filter_bp = 1
+            filter_bp = S.UniformTransmission(1)
         elif self.filter_default.get()[0] == "J":
             filter_name = self.filter_default.get()
             filter_str = "johnson," + filter_name[-1].lower()
@@ -212,6 +220,24 @@ class MyGUI:
                                         format(limiting_mag,'4.3f'), fg='red', bg='white')
             self.lim_mag_label.grid(row=16, column=0, columnspan=2, padx=10, pady=5)
             return limiting_mag
+        except AttributeError:
+            print("ERROR: At least one of QE, telescope bandpass, or filter bandpass must be array-like.")
+
+    def saturating_mag(self):
+        observatory = self.set_obs()
+        flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
+        flat_spec.convert('fnu')
+        # Remove old label, if it exists.
+        try:
+            self.sat_mag_label.destroy()
+        except:
+            pass
+        try:
+            saturating_mag = observatory.saturating_mag()
+            self.sat_mag_label = tk.Label(self.root, text="Saturating Magnitude: " + 
+                                        format(saturating_mag,'4.3f'), fg='red', bg='white')
+            self.sat_mag_label.grid(row=18, column=0, columnspan=2, padx=10, pady=5)
+            return saturating_mag
         except AttributeError:
             print("ERROR: At least one of QE, telescope bandpass, or filter bandpass must be array-like.")
 

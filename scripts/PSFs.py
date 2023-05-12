@@ -60,7 +60,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     x, y = np.meshgrid(x, y)
     pos = np.empty(x.shape + (1,))
     pos[:, :, 0] = np.sqrt((x - mu[0]) ** 2 + (y - mu[1]) ** 2)
-    
+    pos = pos[:, :, 0]
     # Make sure to convert lam from angstroms to um
     arg = np.pi / (lam) / fnum * pos
     # Avoid singularity at origin

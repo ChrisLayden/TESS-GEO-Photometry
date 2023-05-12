@@ -31,9 +31,11 @@ class Sensor(object):
         in e-/pix/s
     qe: pysynphot.bandpass object
         The sensor quantum efficiency as a function of wavelength
+    full_well: int
+        The full well (in e-) of each sensor pixel.
     """
 
-    def __init__(self, pix_size, read_noise, dark_current, qe=1):
+    def __init__(self, pix_size, read_noise, dark_current, full_well, qe=1):
         """Initialize a Sensor object.
 
         Parameters
@@ -46,11 +48,14 @@ class Sensor(object):
             Dark current at -25 degC, in e-/pix/s
         qe: pysynphot.bandpass object
             The sensor quantum efficiency as a function of wavelength
+        full_well: int
+            The full well (in e-) of each sensor pixel.
         """
 
         self.pix_size = pix_size
         self.read_noise = read_noise
         self.dark_current = dark_current
+        self.full_well = full_well
         self.qe = qe
 
 
@@ -117,7 +122,7 @@ class Observatory(object):
     num_pix: int
         The number of pixels used to define an image
         of one point source.
-    psf_sigma: float CURRENTLY UNUSED
+    psf_sigma: float
         The standard deviation of the point spread function
         of the system, in um, assuming the PSF is Gaussian.
         If None is passed, class methods will assume the
@@ -186,6 +191,7 @@ class Observatory(object):
 
         self.sensor = sensor
         self.telescope = telescope
+        self.filter_bandpass = filter_bandpass
         self.bandpass = (filter_bandpass * self.telescope.bandpass *
                          self.sensor.qe)
         self.exposure_time = exposure_time
@@ -196,8 +202,18 @@ class Observatory(object):
 
         plate_scale = 206265 / (self.telescope.focal_length * 10**4)
         self.pix_scale = plate_scale * self.sensor.pix_size
+        self.dark_noise = self.sensor.dark_current * self.exposure_time
+        self.bkg_noise = self.bkg_per_pix()
 
         S.setref(area=np.pi * self.telescope.diam ** 2/4)
+
+    def binset(self, spectrum):
+        """Use the narrowest binset among the telescope, sensor, filter, and spectrum."""
+        # Don't currently use this, since it artificially cuts off where QE measurements stop
+        binset_list = [self.filter_bandpass.wave, self.sensor.qe.wave, self.telescope.bandpass.wave, spectrum.wave]
+        binset_list = [x for x in binset_list if x is not None]
+        range_list = [np.ptp(x) for x in binset_list]
+        return binset_list[np.argmin(range_list)]
 
     def tot_signal(self, spectrum):
         """The total number of electrons generated in one exposure.
@@ -207,6 +223,7 @@ class Observatory(object):
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the signal.
         """
+        # obs_binset = self.binset(spectrum)
         obs = S.Observation(spectrum, self.bandpass, binset=spectrum.wave,
                             force='extrap')
         raw_rate = obs.countrate()
@@ -233,6 +250,7 @@ class Observatory(object):
         return bkg_signal
 
     def lambda_pivot(self, spectrum):
+        # obs_binset = self.binset(spectrum)
         """The pivot wavelength for observation of a given spectrum."""
         obs = S.Observation(spectrum, self.bandpass, binset=spectrum.wave,
                             force='extrap')
@@ -377,6 +395,38 @@ class Observatory(object):
             i += 1
         return mag
 
+    def saturating_mag(self):
+        """The saturating AB magnitude for the observatory."""
+        # We consider just the central pixel, which will saturate first.
+        mag_10_spectrum = S.FlatSpectrum(10, fluxunits='abmag')
+        mag_10_spectrum.convert('fnu')
+        mag_10_signal = self.single_pix_signal(mag_10_spectrum)
+
+        def saturation_diff(mag):
+            """The difference between the pixel signal and full well capacity."""
+            signal = mag_10_signal * 10 ** ((10 - mag) / 2.5)
+            return signal - self.sensor.full_well
+
+        # Newton-Raphson method for root-finding
+        mag_tol, sig_tol = 0.01, 10
+        i = 1
+        mag = 10
+        mag_deriv_step = 0.01
+        eps_mag = 1
+        eps_sig = saturation_diff(mag)
+        while abs(eps_sig) > sig_tol:
+            if abs(eps_mag) < mag_tol:
+                raise RuntimeError('No convergence to within 0.01 mag.')
+            elif i > 50:
+                raise RuntimeError('No convergence after 50 iterations.')
+            eps_sig_prime = ((saturation_diff(mag + mag_deriv_step) - eps_sig) /
+                             mag_deriv_step)
+            eps_mag = eps_sig / eps_sig_prime
+            mag -= eps_mag
+            eps_sig = saturation_diff(mag)
+            i += 1
+        return mag
+
     def intensity_grid(self, spectrum, pos=[0, 0]):
         """The intensity across a 9x9 pixel subarray with sub-pixel resolution
         
@@ -426,11 +476,9 @@ class Observatory(object):
         n_aper = aper.sum()
         obs_grid = pixel_grid * aper
         avg_source_sig = obs_grid.sum()
-        avg_bkg_sig = n_aper * self.bkg_per_pix()
-        avg_dark_sig = n_aper * self.sensor.dark_current * self.exposure_time
-        raw_sig = (np.random.poisson(avg_source_sig + avg_bkg_sig + avg_dark_sig)
+        raw_sig = (np.random.poisson(avg_source_sig + n_aper * (self.dark_noise + self.bkg_noise))
                       + n_aper * np.random.normal(scale=self.sensor.read_noise))
-        subracted_sig = raw_sig - avg_bkg_sig - avg_dark_sig
+        subracted_sig = raw_sig - n_aper * (self.dark_noise + self.bkg_noise)
         return subracted_sig
 
     def snr(self, spectrum, pos=[0, 0]):
@@ -494,7 +542,7 @@ if __name__ == '__main__':
     sensor_bandpass = S.FileBandpass(data_folder + 'imx455.fits')
     telescope_bandpass = S.UniformTransmission(0.693)
     imx455 = Sensor(pix_size=3.76, read_noise=1.65, dark_current=1.5*10**-3,
-                    qe=sensor_bandpass)
+                    full_well=51000, qe=sensor_bandpass)
 
     mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=telescope_bandpass)
     # vis_bandpass = S.ObsBandpass('johnson,b')
@@ -502,8 +550,8 @@ if __name__ == '__main__':
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass,
-                               exposure_time=300, num_exposures=3, psf_sigma=1.6)
+                               exposure_time=1, num_exposures=3, psf_sigma=1.6)
 
-    flat_spec = S.FlatSpectrum(25, fluxunits='abmag')
+    flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
     flat_spec.convert('fnu')
-    tess_geo_obs.snr(flat_spec)
+    print(tess_geo_obs.binset(flat_spec))
