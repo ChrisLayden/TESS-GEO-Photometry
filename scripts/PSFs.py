@@ -5,24 +5,27 @@
 import numpy as np
 from scipy import special, integrate
 
+
 # Calculate the energy in a square of dimensionless half-width p
 # centered on an Airy disk PSF. From Eq. 7 in Torben Anderson's paper,
 # Vol. 54, No. 25 / September 1 2015 / Applied Optics
 # http://dx.doi.org/10.1364/AO.54.007525
-def airy_ensq_energy(p):
+def airy_ensq_energy(half_width):
     def ensq_int(theta):
         """Integrand to calculate the ensquared energy"""
-        return 4/np.pi * (1 - special.jv(0, p/np.cos(theta))**2
-                            - special.jv(1, p/np.cos(theta))**2)
+        return 4/np.pi * (1 - special.jv(0, half_width/np.cos(theta))**2
+                            - special.jv(1, half_width/np.cos(theta))**2)
     pix_fraction = integrate.quad(ensq_int, 0, np.pi/4)[0]
     return pix_fraction
 
+
 # Calculate the energy in a square of half-width p (in um)
 # centered on an Gaussian PSF with x and y standard deviations
-# sigma_x and sigma_y, respectively.
-def gaussian_ensq_energy(p, sigma_x, sigma_y):
-    arg_x = p / np.sqrt(2) / sigma_x
-    arg_y = p / np.sqrt(2) / sigma_y
+# sigma_x and sigma_y, respectively. Currently doesn't let you
+# have any covariance between x and y.
+def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
+    arg_x = half_width / np.sqrt(2) / sigma_x
+    arg_y = half_width / np.sqrt(2) / sigma_y
     pix_fraction = special.erf(arg_x) * special.erf(arg_y)
     return pix_fraction
 
@@ -49,6 +52,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     normalize = subarray_fraction / gaussian.sum()
     return gaussian * normalize
 
+
 def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     """Return an x-y grid with the Airy disk evaluated at each point."""
     # pix_size in microns
@@ -64,7 +68,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     # Make sure to convert lam from angstroms to um
     arg = np.pi / (lam) / fnum * pos
     # Avoid singularity at origin
-    arg[arg==0] = 10 ** -10
+    arg[arg == 0] = 10 ** -10
     airy = (special.jv(1, arg) / arg) ** 2 / np.pi
     # Determine the fraction of the light that hits the entire subarray
     array_p = num_pix / 2 * pix_size * np.pi / fnum / lam
@@ -72,6 +76,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     # Normalize the PSF to have a total amplitude of 1
     normalize = subarray_fraction / airy.sum()
     return airy * normalize
+
 
 # Finding the aperture that maximizes the SNR for an image. Uses the
 # algorithm detailed in Tam Nguyen's thesis.
