@@ -18,10 +18,12 @@ pip install pysynphot
 ```
 
 If neither of these work, see more information at https://pysynphot.readthedocs.io/en/latest/
+
 2) Download just the first two sets of data files
 (http://ssb.stsci.edu/trds/tarfiles/synphot1.tar.gz and
 http://ssb.stsci.edu/trds/tarfiles/synphot2.tar.gz); unpack these
 to some directory /my/dir
+
 3) set
 ```
 export PYSYN_CDBS=/my/dir/grp/redcat/trds
