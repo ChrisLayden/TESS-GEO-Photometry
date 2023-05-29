@@ -5,8 +5,19 @@ Requires tkinter, pysynphot, matplotlib, astropy, numpy, and scipy.
 CPL 05/04/23
 
 Steps to make pysynphot operational:
-1) Follow instructions at https://pysynphot.readthedocs.io/en/latest/
-to install pysynphot with pip or conda
+1) Install pysynphot: if you have a conda environment set up, use
+
+'''
+conda install pysynphot
+'''
+
+Otherwise, if you have python and pip installed, use
+
+'''
+pip install pysynphot
+'''
+
+If neither of these work, see more information at https://pysynphot.readthedocs.io/en/latest/
 2) Download just the first two sets of data files
 (http://ssb.stsci.edu/trds/tarfiles/synphot1.tar.gz and
 http://ssb.stsci.edu/trds/tarfiles/synphot2.tar.gz); unpack these
