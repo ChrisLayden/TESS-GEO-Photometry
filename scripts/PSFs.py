@@ -47,7 +47,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     # Determine the fraction of the light that hits the entire subarray
     array_p = num_pix / 2 * pix_size
     subarray_fraction = gaussian_ensq_energy(array_p, Sigma[0][0], Sigma[1][1])
-    # Normalize the PSF to have a total amplitude of 1
+    # Normalize the PSF to have a total amplitude of subarray_fraction
     gaussian = np.exp(-arg / 2)
     normalize = subarray_fraction / gaussian.sum()
     return gaussian * normalize
@@ -65,7 +65,6 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     pos = np.empty(x.shape + (1,))
     pos[:, :, 0] = np.sqrt((x - mu[0]) ** 2 + (y - mu[1]) ** 2)
     pos = pos[:, :, 0]
-    # Make sure to convert lam from angstroms to um
     arg = np.pi / (lam) / fnum * pos
     # Avoid singularity at origin
     arg[arg == 0] = 10 ** -10
@@ -73,7 +72,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     # Determine the fraction of the light that hits the entire subarray
     array_p = num_pix / 2 * pix_size * np.pi / fnum / lam
     subarray_fraction = airy_ensq_energy(array_p)
-    # Normalize the PSF to have a total amplitude of 1
+    # Normalize the PSF to have a total amplitude of subarray_fraction
     normalize = subarray_fraction / airy.sum()
     return airy * normalize
 

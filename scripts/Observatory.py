@@ -15,6 +15,7 @@ import pysynphot as S
 from RedshiftLookup import RedshiftLookup
 from constants import *
 from PSFs import *
+import matplotlib.pyplot as plt
 
 
 class Sensor(object):
@@ -131,9 +132,6 @@ class Observatory(object):
     obs: pysynphot.observation object
         The Observation object combining all of the
         observatory's specifications.
-    background: float
-        The signal from the background in one exposure, in
-        electrons.
 
     Methods
     ----------
@@ -421,9 +419,9 @@ class Observatory(object):
             i += 1
         return mag
 
-    def intensity_grid(self, spectrum, pos=np.array([0, 0]),
+    def avg_intensity_grid(self, spectrum, pos=np.array([0, 0]),
                        subarray_size=11, resolution=11):
-        """The intensity across a subarray with sub-pixel resolution
+        """The average intensity across a subarray with sub-pixel resolution
 
         Parameters
         ----------
@@ -461,7 +459,7 @@ class Observatory(object):
             microns, with [0,0] representing the center of the
             central pixel.
         """
-        base_grid = self.intensity_grid(spectrum, pos, subarray_size,
+        base_grid = self.avg_intensity_grid(spectrum, pos, subarray_size,
                                         resolution)
         # Sum the signals within each pixel
         temp_grid = base_grid.reshape((11, resolution, 11, resolution))
@@ -533,16 +531,23 @@ if __name__ == '__main__':
                     full_well=51000, qe=sensor_bandpass)
 
     mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=telescope_bandpass)
-    # vis_bandpass = S.ObsBandpass('johnson,b')
+    b_bandpass = S.ObsBandpass('johnson,b')
+    v_bandpass = S.ObsBandpass('johnson,v')
     vis_bandpass = S.UniformTransmission(1.0)
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass,
-                               exposure_time=300, num_exposures=3)
+                               exposure_time=60, num_exposures=1)
+
+    tess_geo_b = Observatory(telescope=mono_tele_v10, sensor=imx455,
+                            filter_bandpass=b_bandpass,
+                            exposure_time=60, num_exposures=1)
+
+    tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
+                            filter_bandpass=v_bandpass,
+                            exposure_time=300, num_exposures=3)                        
 
     flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
-    # print(tess_geo_obs.binset(flat_spec))
-    # print(tess_geo_obs.limiting_mag())
 
     v11_bandpass = S.UniformTransmission(0.54)
     mono_tele_v11 = Telescope(diam=28.5, f_num=5, bandpass=v11_bandpass)
@@ -553,8 +558,39 @@ if __name__ == '__main__':
                 full_well=100000, qe=imx487_qe)
     data_folder = os.path.dirname(__file__) + '/../data/'
     uv_filter = S.FileBandpass(data_folder + "uv_200_300.fits")
-    airy_fwhm = 1.025 * 2500 * 5/  10 ** 4
+    airy_fwhm = 1.025 * 2500 * 3.5 / 10 ** 4
+    # Factor of 2 because PSF is ~twice diffraction limited
     uv_sigma = 2 * airy_fwhm / 2.355
-    tess_geo_uv = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=300,
-                            num_exposures=3, psf_sigma=uv_sigma)
-    print(tess_geo_uv.limiting_mag())
+    tess_geo_uv = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=60,
+                            num_exposures=1, psf_sigma=uv_sigma)
+    
+    mag_list = range(5, 26)
+    # psf_sigma_list = [None, 2, 4, 6]
+    # For UV
+    psf_sigma_list = [uv_sigma / 2, uv_sigma, 2, 4, 6]
+    # psf_sigma_name_list = ["~1.5 (Airy Disk)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
+    # psf_sigma_name_list = ["~1.8 (Airy Disk)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
+    psf_sigma_name_list = ["~0.5 (Airy Disk)", "1 (Gaussian)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
+    phot_prec_list = np.zeros((len(psf_sigma_list), len(mag_list)))
+    for i, psf_sigma in enumerate(psf_sigma_list):
+        tess_geo_uv.psf_sigma = psf_sigma
+        for j, mag in enumerate(mag_list):
+            mag_sp = S.FlatSpectrum(fluxdensity=mag, fluxunits='abmag')
+            mag_sp.convert('fnu')
+            snr = tess_geo_uv.snr(mag_sp)
+            phot_prec = 10 ** 6 / snr
+            phot_prec_list[i][j] = phot_prec
+        plt.plot(mag_list, phot_prec_list[i])
+
+    
+    detection_limit = 10 ** 6 / 5
+    plt.axhline(y = detection_limit, color = 'k',
+                linestyle = '--')
+    plt.annotate(r'5-$\sigma$ Detection', [10, detection_limit*1.5])
+    plt.legend(psf_sigma_name_list, title=r'PSF $\sigma$ (um)')
+    plt.yscale('log')
+    plt.ylim(10, 10 ** 6)
+    plt.xlabel('AB Magnitude')
+    plt.ylabel('Photometric Precision (ppm)')
+    plt.title("UV-Band Non-Jitter Photometric Precision at 60 sec")
+    plt.show()

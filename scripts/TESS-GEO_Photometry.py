@@ -4,7 +4,7 @@ import os
 import tkinter as tk
 import pysynphot as S
 from Observatory import Sensor, Telescope, Observatory, blackbody_spec
-from Instruments import imx455, imx487, mono_tele_v10, mono_tele_v11
+from Instruments import imx455, imx487, mono_tele_v10, mono_tele_v11, mono_tele_v3, tesscam, tess_tele
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -44,7 +44,7 @@ class MyGUI:
         self.sensor_menu_header = tk.Label(self.root, text='Or Choose a Sensor',
                                       font=['Arial', 16, 'bold'])
         self.sensor_menu_header.grid(row=0, column=2, columnspan=2, padx=padx, pady=pady)
-        self.sensor_options = ['IMX 455 (Visible)', 'IMX 487 (UV)']
+        self.sensor_options = ['IMX 455 (Visible)', 'IMX 487 (UV)', 'TESS Camera']
         self.sensor_default = tk.StringVar()
         self.sensor_default.set(None)
         self.sensor_menu = tk.OptionMenu(self.root, self.sensor_default, *self.sensor_options)
@@ -72,7 +72,7 @@ class MyGUI:
         self.telescope_menu_header = tk.Label(self.root, text='Or Choose a Telescope',
                                       font=['Arial', 16, 'bold'])
         self.telescope_menu_header.grid(row=6, column=2, columnspan=2, padx=padx, pady=pady)
-        self.telescope_options = ['MonoTele V10 (Visible)', 'MonoTele V11 (UV)']
+        self.telescope_options = ['MonoTele V10 (Visible)', 'MonoTele V11 (UV)', 'MonoTele V3 (UV)', 'TESS Telescope (IR)']
         self.telescope_default = tk.StringVar()
         self.telescope_default.set(None)
         self.telescope_menu = tk.OptionMenu(self.root, self.telescope_default, *self.telescope_options)
@@ -182,6 +182,8 @@ class MyGUI:
             self.sensor = imx455
         elif self.sensor_default.get() == self.sensor_options[1]:
             self.sensor = imx487
+        elif self.sensor_default.get() == self.sensor_options[2]:
+            self.sensor = tesscam
         self.sensor_vars[0].set(self.sensor.pix_size)
         self.sensor_vars[1].set(self.sensor.read_noise)
         self.sensor_vars[2].set(self.sensor.dark_current)
@@ -195,8 +197,13 @@ class MyGUI:
             self.psf_sigma = None
         elif self.telescope_default.get() == self.telescope_options[1]:
             self.telescope = mono_tele_v11
-            self.psf_sigma = 1.09 # for f/5; ~2 times the diffraction limit
-            # self.psf_sigma = 0.76 # for f/3.5
+            # self.psf_sigma = 1.09 # for f/5; ~2 times the diffraction limit
+            self.psf_sigma = 0.76 # for f/3.5
+        elif self.telescope_default.get() == self.telescope_options[2]:
+            self.telescope = mono_tele_v3
+            self.psf_sigma = 0.76 # for f/3.5
+        elif self.telescope_default.get() == self.telescope_options[3]:
+            self.telescope = tess_tele
         self.telescope_vars[0].set(self.telescope.diam)
         self.telescope_vars[1].set(self.telescope.f_num)
         self.telescope_vars[2].set(self.telescope.bandpass)
@@ -274,8 +281,8 @@ class MyGUI:
     def calc_signal(self):
         spectrum = self.set_spectrum()
         observatory = self.set_obs()
-        tot_sig = observatory.tot_signal(spectrum)
-        return tot_sig
+        tot_sig = observatory.tot_signal(spectrum) * observatory.num_exposures
+        return int(round(tot_sig))
 
     def calc_snr(self):
         spectrum = self.set_spectrum()
@@ -285,7 +292,7 @@ class MyGUI:
 
     def disp_sig(self):
         tot_sig = self.calc_signal()
-        self.sig_label.config(text='Signal: ' + format(tot_sig,'4.3f'))
+        self.sig_label.config(text='Signal: ' + format(tot_sig,'4d'))
 
     def disp_snr(self):
         snr = self.calc_snr()
@@ -294,7 +301,7 @@ class MyGUI:
     def disp_phot_prec(self):
         snr = self.calc_snr()
         phot_prec = 10 ** 6 / snr
-        self.phot_prec_label.config(text='Photometric Precision: ' + format(phot_prec,'4.3f'))
+        self.phot_prec_label.config(text='Photometric Precision: ' + format(phot_prec,'4.3f') + " ppm")
         
 
 MyGUI()
