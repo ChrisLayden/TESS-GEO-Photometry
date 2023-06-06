@@ -55,3 +55,7 @@ uv_sigma = 2 * airy_fwhm / 2.355
 tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter, exposure_time=1,
                           num_exposures=1, psf_sigma=uv_sigma)
 flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
+
+tess_geo_v11 = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=60,
+                          num_exposures=1, psf_sigma=uv_sigma)
+print(tess_geo_v11.limiting_mag())

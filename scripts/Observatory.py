@@ -195,8 +195,6 @@ class Observatory(object):
         self.dark_noise = self.sensor.dark_current * self.exposure_time
         self.bkg_noise = self.bkg_per_pix()
 
-        S.setref(area=np.pi * self.telescope.diam ** 2/4)
-
     def binset(self, spectrum):
         """Narrowest binset from telescope, sensor, filter, and spectrum."""
         binset_list = [self.filter_bandpass.wave, self.sensor.qe.wave,
@@ -214,6 +212,7 @@ class Observatory(object):
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the signal.
         """
+        S.setref(area=np.pi * self.telescope.diam ** 2/4)
         obs_binset = self.binset(spectrum)
         obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
                             force='extrap')
@@ -243,6 +242,7 @@ class Observatory(object):
     def lambda_pivot(self, spectrum):
         """The pivot wavelength for observation of a given spectrum."""
         obs_binset = self.binset(spectrum)
+        S.setref(area=np.pi * self.telescope.diam ** 2/4)
         obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
                             force='extrap')
         return obs.pivot()
@@ -535,6 +535,13 @@ if __name__ == '__main__':
     v_bandpass = S.ObsBandpass('johnson,v')
     vis_bandpass = S.UniformTransmission(1.0)
 
+    flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
+    flat_spec.convert('fnu')
+
+    tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
+                            filter_bandpass=v_bandpass,
+                            exposure_time=300, num_exposures=3)
+
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass,
                                exposure_time=60, num_exposures=1)
@@ -542,42 +549,55 @@ if __name__ == '__main__':
     tess_geo_b = Observatory(telescope=mono_tele_v10, sensor=imx455,
                             filter_bandpass=b_bandpass,
                             exposure_time=60, num_exposures=1)
-
-    tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
-                            filter_bandpass=v_bandpass,
-                            exposure_time=300, num_exposures=3)                        
-
-    flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
+                         
 
     v11_bandpass = S.UniformTransmission(0.54)
-    mono_tele_v11 = Telescope(diam=28.5, f_num=5, bandpass=v11_bandpass)
+    mono_tele_v11 = Telescope(diam=28.5, f_num=3.5, bandpass=v11_bandpass)
+
+    v3_bandpass = S.UniformTransmission(0.54)
+    mono_tele_v3 = Telescope(diam=8.5, f_num=3.5, bandpass=v3_bandpass)
 
 
     imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
     imx487 = Sensor(pix_size=2.74, read_noise=3, dark_current=5**-4,
                 full_well=100000, qe=imx487_qe)
+
     data_folder = os.path.dirname(__file__) + '/../data/'
     uv_filter = S.FileBandpass(data_folder + "uv_200_300.fits")
     airy_fwhm = 1.025 * 2500 * 3.5 / 10 ** 4
     # Factor of 2 because PSF is ~twice diffraction limited
     uv_sigma = 2 * airy_fwhm / 2.355
-    tess_geo_uv = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=60,
+
+    tess_geo_v11 = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=60,
                             num_exposures=1, psf_sigma=uv_sigma)
-    
+
+    tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter, exposure_time=60,
+                            num_exposures=4, psf_sigma=uv_sigma)
+
+    print(tess_geo_v3.pix_scale)
+    print(tess_geo_v11.pix_scale)
+
     mag_list = range(5, 26)
+    obs_list = [tess_geo_v11, tess_geo_v3]
+    obs_name_list = ["28.5 cm", r"8.5 cm ($\times$4)"]
+    phot_prec_list = np.zeros((len(obs_list), len(mag_list)))
     # psf_sigma_list = [None, 2, 4, 6]
     # For UV
-    psf_sigma_list = [uv_sigma / 2, uv_sigma, 2, 4, 6]
+    psf_sigma_list = [None, uv_sigma, 2, 4, 6]
     # psf_sigma_name_list = ["~1.5 (Airy Disk)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
     # psf_sigma_name_list = ["~1.8 (Airy Disk)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
     psf_sigma_name_list = ["~0.5 (Airy Disk)", "1 (Gaussian)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
     phot_prec_list = np.zeros((len(psf_sigma_list), len(mag_list)))
-    for i, psf_sigma in enumerate(psf_sigma_list):
-        tess_geo_uv.psf_sigma = psf_sigma
+    
+    # for i, psf_sigma in enumerate(psf_sigma_list):
+    #     tess_geo_v11.psf_sigma = psf_sigma
+    #     obs = tess_geo_v11
+    for i, obs in enumerate(obs_list):
+        
         for j, mag in enumerate(mag_list):
             mag_sp = S.FlatSpectrum(fluxdensity=mag, fluxunits='abmag')
             mag_sp.convert('fnu')
-            snr = tess_geo_uv.snr(mag_sp)
+            snr = obs.snr(mag_sp)
             phot_prec = 10 ** 6 / snr
             phot_prec_list[i][j] = phot_prec
         plt.plot(mag_list, phot_prec_list[i])
@@ -587,7 +607,8 @@ if __name__ == '__main__':
     plt.axhline(y = detection_limit, color = 'k',
                 linestyle = '--')
     plt.annotate(r'5-$\sigma$ Detection', [10, detection_limit*1.5])
-    plt.legend(psf_sigma_name_list, title=r'PSF $\sigma$ (um)')
+    # plt.legend(psf_sigma_name_list, title=r'PSF $\sigma$ (um)')
+    plt.legend(obs_name_list, title='Telescope Diamter')
     plt.yscale('log')
     plt.ylim(10, 10 ** 6)
     plt.xlabel('AB Magnitude')
