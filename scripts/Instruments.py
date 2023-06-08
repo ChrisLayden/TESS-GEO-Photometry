@@ -14,7 +14,7 @@ mono_tele_v11
 """
 
 import os
-from Observatory import Sensor, Telescope, Observatory
+from observatory import Sensor, Telescope, Observatory
 import pysynphot as S
 
 data_folder = os.path.dirname(__file__) + '/../data/'
@@ -49,13 +49,22 @@ tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 uv_filter = S.FileBandpass(data_folder + "uv_200_300.fits")
-airy_fwhm = 1.025 * 2500 * 3.5 /  10 ** 4
-uv_sigma = 2 * airy_fwhm / 2.355
+AIRY_FWHM = 1.025 * 2500 * 3.5 /  10 ** 4
+UV_SIGMA = 2 * AIRY_FWHM / 2.355
 # print(uv_sigma)
-tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter, exposure_time=1,
-                          num_exposures=1, psf_sigma=uv_sigma)
+tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter,
+                          exposure_time=1, num_exposures=1,
+                          psf_sigma=UV_SIGMA)
 flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
 
-tess_geo_v11 = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=60,
-                          num_exposures=1, psf_sigma=uv_sigma)
-print(tess_geo_v11.limiting_mag())
+tess_geo_v11 = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter,
+                           exposure_time=60, num_exposures=1,
+                           psf_sigma=UV_SIGMA)
+
+sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
+               'TESS CCD': tesscam}
+
+telescope_dict = {'Mono Tele V10 (Visible)': mono_tele_v10,
+                  'Mono Tele V11 (UV)': mono_tele_v11,
+                  'Mono Tele V3 (UV)': mono_tele_v3,
+                  'TESS Telescope (IR)': tess_tele,}

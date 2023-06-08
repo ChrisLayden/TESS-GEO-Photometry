@@ -12,10 +12,10 @@ Observatory
 import os
 import numpy as np
 import pysynphot as S
-from RedshiftLookup import RedshiftLookup
-from SkyBackground import bkg_spectrum
+from redshift_lookup import RedshiftLookup
+from sky_background import bkg_spectrum
 from constants import *
-from PSFs import *
+from psfs import *
 import matplotlib.pyplot as plt
 
 
