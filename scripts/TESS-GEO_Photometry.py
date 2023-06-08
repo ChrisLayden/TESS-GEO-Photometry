@@ -86,7 +86,7 @@ class MyGUI:
 
         self.observing_labels = []
         observing_label_names = ['Exposure Time (s)', 'Exposures in Stack',
-                                 'Limiting SNR']
+                                 'Limiting SNR', 'Ecliptic Latitude (deg)']
         self.observing_entries = []
         self.observing_vars = []
         for i, value in enumerate(observing_label_names):
@@ -101,20 +101,21 @@ class MyGUI:
         self.observing_vars[0].set(300)
         self.observing_vars[1].set(3)
         self.observing_vars[2].set(5)
-        self.observing_labels[-1].grid(row=14, column=0, padx=padx, pady=pady)
+        self.observing_vars[3].set(90)
+        self.observing_labels[-1].grid(row=15, column=0, padx=padx, pady=pady)
         self.filter_options = ['None', 'Johnson U', 'Johnson B',
                                'Johnson V', 'Johnson R', 'Johnson I',
                                'UV (200-300 nm)']
         self.filter_default = tk.StringVar()
         self.filter_default.set('None')
         self.filter_menu = tk.OptionMenu(self.root, self.filter_default, *self.filter_options)
-        self.filter_menu.grid(row=14, column=1, padx=padx, pady=pady)
+        self.filter_menu.grid(row=15, column=1, padx=padx, pady=pady)
 
         self.lim_mag_button = tk.Button(self.root, text='Calculate limiting magnitude', command=self.limiting_mag)
-        self.lim_mag_button.grid(row=15, column=0, columnspan=2, padx=padx, pady=pady)
+        self.lim_mag_button.grid(row=16, column=0, columnspan=2, padx=padx, pady=pady)
 
         self.lim_mag_button = tk.Button(self.root, text='Calculate saturating magnitude', command=self.saturating_mag)
-        self.lim_mag_button.grid(row=17, column=0, columnspan=2, padx=padx, pady=pady)
+        self.lim_mag_button.grid(row=18, column=0, columnspan=2, padx=padx, pady=pady)
 
         # Set a spectrum to observe
         self.spectrum_header = tk.Label(self.root, text='Spectrum to Observe',
@@ -167,7 +168,7 @@ class MyGUI:
 
         # Initializing labels that display results
         self.sat_mag_label = tk.Label(self.root, fg='red')
-        self.sat_mag_label.grid(row=18, column=0, columnspan=2, padx=10, pady=5)
+        self.sat_mag_label.grid(row=19, column=0, columnspan=2, padx=10, pady=5)
         self.sig_label = tk.Label(self.root, fg='red')
         self.sig_label.grid(row=8, column=5, columnspan=1, padx=10, pady=5)
         self.snr_label = tk.Label(self.root, fg='red')
@@ -221,6 +222,7 @@ class MyGUI:
         exposure_time = self.observing_vars[0].get()
         num_exposures = self.observing_vars[1].get()
         limiting_snr = self.observing_vars[2].get()
+        eclip_angle = self.observing_vars[3].get()
         if self.filter_default.get() == 'None':
             filter_bp = S.UniformTransmission(1)
         elif self.filter_default.get()[0] == 'J':
@@ -231,7 +233,8 @@ class MyGUI:
             filter_bp = S.FileBandpass(data_folder + 'uv_200_300.fits')
         observatory = Observatory(sensor, telescope, exposure_time=exposure_time,
                                   num_exposures=num_exposures, limiting_s_n=limiting_snr,
-                                  filter_bandpass=filter_bp, psf_sigma=self.psf_sigma)
+                                  filter_bandpass=filter_bp, psf_sigma=self.psf_sigma,
+                                  eclip_lat=eclip_angle)
         return observatory
 
     def limiting_mag(self):
@@ -247,7 +250,7 @@ class MyGUI:
             limiting_mag = observatory.limiting_mag()
             self.lim_mag_label = tk.Label(self.root, text='Limiting Magnitude: ' + 
                                         format(limiting_mag,'4.3f'), fg='red', bg='white')
-            self.lim_mag_label.grid(row=16, column=0, columnspan=2, padx=10, pady=5)
+            self.lim_mag_label.grid(row=17, column=0, columnspan=2, padx=10, pady=5)
             return limiting_mag
         except AttributeError:
             print('ERROR: At least one of QE, telescope bandpass, or filter bandpass must be array-like.')
