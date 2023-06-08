@@ -16,16 +16,32 @@ resolution = 11
 jitter_time = 1
 
 def jitter_animation(initial_grid, exposure_time, jitter):
+    '''Animate the jittering of an intensity grid.
+    
+    Parameters
+    ----------
+    initial_grid : array-like
+        The initial intensity grid.
+    exposure_time : float
+        The total exposure time, in seconds.
+    jitter : float
+        The RMS jitter, in pixels.
+    
+    Returns
+    -------
+    ani : matplotlib.animation.FuncAnimation
+        The animation object.
+    '''
     num_steps = exposure_time // jitter_time
     angles = np.random.uniform(low=0.0, high=2*np.pi, size=num_steps)
     displacements = np.random.normal(scale=jitter * resolution, size=num_steps)
     x_shifts = np.rint(np.cos(angles) * displacements).astype(int)
     y_shifts = np.rint(np.sin(angles) * displacements).astype(int)
-    final_grid = np.zeros_like(initial_grid)
     initial_frame = initial_grid.reshape((sub_size, resolution, sub_size, resolution)).sum(axis=(1, 3))
     N, M = initial_grid.shape
 
     def update(frame):
+        '''Do one step in the animation.'''
         i = frame
         shifted_grid = np.zeros_like(initial_grid)
         shifted_grid[max(x_shifts[i],0):M+min(x_shifts[i],0),
@@ -71,7 +87,22 @@ def jitter_animation(initial_grid, exposure_time, jitter):
     plt.show()
 
 def avg_intensity_to_frame(grid, bkg_plus_dc, read_noise):
-    '''Convert an intensity grid to an exposure with random noise.'''
+    '''Convert an intensity grid to an exposure with random noise.
+    
+    Parameters
+    ----------
+    grid : array-like
+        The intensity grid of electrons per subpixel.
+    bkg_plus_dc : float
+        The background and dark current noise, in electrons per subpixel.
+    read_noise : float
+        The read noise, in electrons per subpixel.
+    
+    Returns
+    -------
+    frame : array-like
+        The exposure of electrons per pixel.
+    '''
     frame = grid.reshape((sub_size, resolution, sub_size, resolution)).sum(axis=(1, 3))
     # Add shot noise
     frame = np.random.poisson(lam=frame)
@@ -94,6 +125,22 @@ def shift_grid(grid, del_x, del_y):
     return new_grid
 
 def jittered_grid(initial_grid, num_steps, jitter):
+    '''The intensity grid averaged over steps of jittering.
+    
+    Parameters
+    ----------
+    initial_grid : array-like
+        The initial intensity grid.
+    num_steps : int
+        The number of steps to average over.
+    jitter : float
+        The RMS jitter, in pixels.
+        
+    Returns
+    -------
+    final_grid : array-like
+        The final intensity grid.
+    '''
     angles = np.random.uniform(low=0.0, high=2*np.pi, size=num_steps)
     displacements = np.random.normal(scale=jitter * resolution, size=num_steps)
     del_x_list = np.rint(np.cos(angles) * displacements).astype(int)
@@ -106,7 +153,22 @@ def jittered_grid(initial_grid, num_steps, jitter):
     return final_grid
 
 def observed_image(observatory, initial_grid, jitter):
-    '''The actual image observed.'''
+    '''The actual image observed.
+    
+    Parameters
+    ----------
+    observatory : Observatory
+        The observatory object.
+    initial_grid : array-like
+        The initial intensity grid.
+    jitter : float
+        The RMS jitter, in pixels.
+    
+    Returns
+    -------
+    image : array-like
+        The observed image.
+    '''
     image = np.zeros((sub_size, sub_size))
     bkg_plus_dc = observatory.bkg_noise + observatory.dark_noise
     read_noise = observatory.sensor.read_noise
@@ -142,7 +204,24 @@ def observed_image(observatory, initial_grid, jitter):
     return image
 
 def signal_list(observatory, obs_duration, jitter, spectrum):
-    '''A list of signals observed for a given constant spectrum.'''
+    '''A list of signals observed for a given constant spectrum.
+    
+    Parameters
+    ----------
+    observatory : Observatory
+        The observatory object.
+    obs_duration : float
+        The total observation duration, in seconds.
+    jitter : float
+        The RMS jitter, in pixels.
+    spectrum : pysynphot.spectrum.SourceSpectrum
+        The spectrum of the source.
+
+    Returns
+    -------
+    sig_list : array-like
+        The list of signals observed.
+    '''
     initial_grid = observatory.avg_intensity_grid(spectrum, pos=[0,0], subarray_size=sub_size)
     image_time = observatory.exposure_time * observatory.num_exposures
     num_images = int(obs_duration // image_time)
@@ -157,6 +236,23 @@ def signal_list(observatory, obs_duration, jitter, spectrum):
     return sig_list
 
 def multithread_signal_list(observatory, obs_duration, jitter, spectrum_list):
+    '''A list of signals observed for a given list of spectra.
+    
+    Parameters
+    ----------
+    observatory : Observatory
+        The observatory object.
+    obs_duration : float
+        The total observation duration, in seconds.
+    jitter : float
+        The RMS jitter, in pixels.
+        
+    Returns
+    -------
+    means_list : array-like
+        The list of mean signals observed for each spectrum.
+    stds_list : array-like
+        The list of standard deviations of the signals observed for each spectrum.'''
     processes_pool = Pool(len(spectrum_list))
     new_func = partial(signal_list, observatory, obs_duration, jitter)
     out_list = processes_pool.map(new_func, spectrum_list)

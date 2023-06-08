@@ -222,6 +222,7 @@ class Observatory(object):
         return signal
 
     def bkg_per_pix(self):
+        """The background noise per pixel, in e-/pix."""
         bkg_wave, bkg_ilam = bkg_spectrum(self.eclip_lat)
         bkg_flam = bkg_ilam * self.pix_scale ** 2
         bkg_sp = S.ArraySpectrum(bkg_wave, bkg_flam, fluxunits='flam')
@@ -259,8 +260,7 @@ class Observatory(object):
         return signal
 
     def single_pix_noise(self):
-        """The noise from the background and sensor, in e-/pix.
-        """
+        """The noise from the background and sensor, in e-/pix."""
         # Noise from sensor dark current
         dark_current_noise = np.sqrt(self.sensor.dark_current *
                                      self.exposure_time)

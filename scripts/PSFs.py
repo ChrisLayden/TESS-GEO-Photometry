@@ -11,6 +11,18 @@ from scipy import special, integrate
 # Vol. 54, No. 25 / September 1 2015 / Applied Optics
 # http://dx.doi.org/10.1364/AO.54.007525
 def airy_ensq_energy(half_width):
+    '''Calculate the energy in a square of half-width p centered on an Airy disk PSF.
+    
+    Parameters
+    ----------
+    half_width : float
+        The half-width of the square, defined in the paper linked above.
+    
+    Returns
+    -------
+    pix_fraction : float
+        The fraction of the light that hits the square.
+    '''
     def ensq_int(theta):
         """Integrand to calculate the ensquared energy"""
         return 4/np.pi * (1 - special.jv(0, half_width/np.cos(theta))**2
@@ -24,6 +36,22 @@ def airy_ensq_energy(half_width):
 # sigma_x and sigma_y, respectively. Currently doesn't let you
 # have any covariance between x and y.
 def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
+    '''Calculate the energy in a square of half-width p centered on a Gaussian PSF.
+
+    Parameters
+    ----------
+    half_width : float
+        The half-width of the square, in units of um.
+    sigma_x : float
+        The standard deviation of the Gaussian in the x direction, in um.
+    sigma_y : float
+        The standard deviation of the Gaussian in the y direction, in um.
+    
+    Returns
+    -------
+    pix_fraction : float
+        The fraction of the light that hits the square.
+    '''
     arg_x = half_width / np.sqrt(2) / sigma_x
     arg_y = half_width / np.sqrt(2) / sigma_y
     pix_fraction = special.erf(arg_x) * special.erf(arg_y)
@@ -31,7 +59,28 @@ def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
 
 
 def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
-    """Return an x-y grid with a Gaussian disk evaluated at each point."""
+    """Return an x-y grid with a Gaussian disk evaluated at each point.
+    
+    Parameters
+    ----------
+    num_pix : int
+        The number of pixels in the subarray.
+    resolution : int
+        The number of subpixels per pixel in the subarray.
+    pix_size : float
+        The size of each pixel in the subarray, in microns.
+    mu : array-like
+        The mean of the Gaussian, in pixels.
+    Sigma : array-like
+        The covariance matrix of the Gaussian, in pixels.
+        
+    Returns
+    -------
+    gaussian : array-like
+        The Gaussian PSF evaluated at each point in the subarray,
+        normalized to have a total amplitude of the fractional energy
+        ensquared in the subarray.
+    """
     grid_points = num_pix * resolution
     x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
     y = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
@@ -54,9 +103,30 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
 
 
 def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
-    """Return an x-y grid with the Airy disk evaluated at each point."""
-    # pix_size in microns
-    # lam in angstrom
+    """Return an x-y grid with the Airy disk evaluated at each point.
+    
+    Parameters
+    ----------
+    num_pix : int
+        The number of pixels in the subarray.
+    resolution : int
+        The number of subpixels per pixel in the subarray.
+    pix_size : float
+        The size of each pixel in the subarray, in microns.
+    mu : array-like
+        The mean position of the Airy disk, in pixels.
+    fnum : float
+        The f-number of the telescope.
+    lam : float
+        The wavelength of the light, in Angstroms.
+    
+    Returns
+    -------
+    airy : array-like
+        The Airy disk evaluated at each point in the subarray,
+        normalized to have a total amplitude of the fractional energy
+        ensquared in the subarray.
+    """
     lam /= 10 ** 4
     grid_points = num_pix * resolution
     x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
@@ -88,6 +158,12 @@ def optimal_aperture(prf_grid, noise_per_pix):
         The signal recorded in each pixel
     noise_per_pix: float
         The noise per pixel, besides source shot noise.
+    
+    Returns
+    -------
+    aperture_grid: array-like
+        A grid of 1s and 0s, where 1s indicate pixels that should be
+        included in the optimal aperture.
     """
 
     # Copy the image to a new array so we aren't modifying

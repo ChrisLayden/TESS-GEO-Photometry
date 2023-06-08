@@ -1,3 +1,5 @@
+'''Functions to calculate the sky background spectrum.'''
+
 import numpy as np
 import os
 
