@@ -1,17 +1,6 @@
 # Chris Layden
 
-"""Defining sensors and telescopes used in TESS-GEO.
-
-Sensor Objects
-----------
-imx455
-imx487
-
-Telescope Objects
-----------
-mono_tele_v10
-mono_tele_v11
-"""
+'''Defining sensors and telescopes used in TESS-GEO.'''
 
 import os
 from observatory import Sensor, Telescope, Observatory
@@ -31,7 +20,7 @@ imx487 = Sensor(pix_size=2.74, read_noise=3, dark_current=5**-4,
 tess_qe = S.FileBandpass(data_folder + 'tess.fits')
 # This dark current is just a place holder; it's negligible anyways
 tesscam = Sensor(pix_size=15, read_noise=10, dark_current=5**-4,
-                full_well=200000, qe=tess_qe)
+                 full_well=200000, qe=tess_qe)
 
 v10_bandpass = S.UniformTransmission(0.693)
 mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
@@ -48,8 +37,8 @@ tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
 
 
 data_folder = os.path.dirname(__file__) + '/../data/'
-uv_filter = S.FileBandpass(data_folder + "uv_200_300.fits")
-AIRY_FWHM = 1.025 * 2500 * 3.5 /  10 ** 4
+uv_filter = S.FileBandpass(data_folder + 'uv_200_300.fits')
+AIRY_FWHM = 1.025 * 2500 * 3.5 / 10 ** 4
 UV_SIGMA = 2 * AIRY_FWHM / 2.355
 # print(uv_sigma)
 tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter,
@@ -67,4 +56,4 @@ sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
 telescope_dict = {'Mono Tele V10 (Visible)': mono_tele_v10,
                   'Mono Tele V11 (UV)': mono_tele_v11,
                   'Mono Tele V3 (UV)': mono_tele_v3,
-                  'TESS Telescope (IR)': tess_tele,}
+                  'TESS Telescope (IR)': tess_tele}

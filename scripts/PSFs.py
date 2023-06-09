@@ -1,6 +1,20 @@
-# Chris Layden
+'''Functions for calculating PSFs and optimal apertures.
 
-"""Functions useful for simulating and analyzing PSFs."""
+Functions
+---------
+airy_ensq_energy : float
+    The fraction of the light that hits a square of half-width p
+    centered on an Airy disk PSF.
+gaussian_ensq_energy : float
+    The fraction of the light that hits a square of half-width p
+    centered on a Gaussian PSF.
+gaussian_psf : array-like
+    An x-y grid with a Gaussian disk evaluated at each point.
+airy_disk : array-like
+    An x-y grid with the Airy disk evaluated at each point.
+optimal_aperture : array-like
+    The optimal aperture for maximizing S/N.
+'''
 
 import numpy as np
 from scipy import special, integrate
@@ -11,13 +25,13 @@ from scipy import special, integrate
 # Vol. 54, No. 25 / September 1 2015 / Applied Optics
 # http://dx.doi.org/10.1364/AO.54.007525
 def airy_ensq_energy(half_width):
-    '''Calculate the energy in a square of half-width p centered on an Airy disk PSF.
-    
+    '''Returns the energy in a square of half-width p centered on an Airy PSF.
+
     Parameters
     ----------
     half_width : float
         The half-width of the square, defined in the paper linked above.
-    
+
     Returns
     -------
     pix_fraction : float
@@ -36,7 +50,7 @@ def airy_ensq_energy(half_width):
 # sigma_x and sigma_y, respectively. Currently doesn't let you
 # have any covariance between x and y.
 def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
-    '''Calculate the energy in a square of half-width p centered on a Gaussian PSF.
+    '''Returns the energy in square of half-width p centered on a Gaussian PSF.
 
     Parameters
     ----------
@@ -46,7 +60,7 @@ def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
         The standard deviation of the Gaussian in the x direction, in um.
     sigma_y : float
         The standard deviation of the Gaussian in the y direction, in um.
-    
+
     Returns
     -------
     pix_fraction : float
@@ -60,7 +74,7 @@ def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
 
 def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     """Return an x-y grid with a Gaussian disk evaluated at each point.
-    
+
     Parameters
     ----------
     num_pix : int
@@ -73,7 +87,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
         The mean of the Gaussian, in pixels.
     Sigma : array-like
         The covariance matrix of the Gaussian, in pixels.
-        
+
     Returns
     -------
     gaussian : array-like
@@ -104,7 +118,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
 
 def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     """Return an x-y grid with the Airy disk evaluated at each point.
-    
+
     Parameters
     ----------
     num_pix : int
@@ -119,7 +133,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
         The f-number of the telescope.
     lam : float
         The wavelength of the light, in Angstroms.
-    
+
     Returns
     -------
     airy : array-like
@@ -158,7 +172,7 @@ def optimal_aperture(prf_grid, noise_per_pix):
         The signal recorded in each pixel
     noise_per_pix: float
         The noise per pixel, besides source shot noise.
-    
+
     Returns
     -------
     aperture_grid: array-like

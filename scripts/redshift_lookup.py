@@ -1,16 +1,30 @@
+'''Tools for calculating redshifts from luminosity distances.
+
+Classes
+-------
+RedshiftLookup : class
+    A class that calculates a table of luminosity distances for
+    redshifts out to z = 1.0.  It has a method to interpolate the
+    table in order to find a redshift for a given distance.
+
+Functions
+---------
+lumdist : function
+    Numerically intergrates function to calculate luminosity distance.'''
+
 import numpy as np
 import matplotlib.pyplot as plt
+import constants
 from scipy.integrate import quad
-from constants import *
 
 
 def lumdist(z):
-    """Numerically intergrates function to calculate luminosity
+    '''Numerically intergrates function to calculate luminosity
     distance.
 
     Assumes a flat universe.  For now, H0 and Omega_m are hard-coded to
     80 km/s/Mpc and 0.3.  Radiation from early universe is ignored.
-    """
+    '''
     def E(z, Omega_m):
         # assumes flat universe
         return 1./np.sqrt(
@@ -22,17 +36,17 @@ def lumdist(z):
     # calculate the luminosity distnace, returns in Mpc
     integral = quad(E, 0, z, args=(Omega_m))
     # h0 in km/s/Mpc
-    dp = lightspeed/(H0/CM_PER_PARSEC/1.e6)*integral[0]
+    dp = constants.lightspeed/(H0/constants.CM_PER_PARSEC/1.e6)*integral[0]
 
-    return (1+z)*dp/CM_PER_PARSEC/1.e6
+    return (1+z)*dp/constants.CM_PER_PARSEC/1.e6
 
 
 class RedshiftLookup(object):
-    """This class will will calculate a table of luminosity distances
+    '''This class will will calculate a table of luminosity distances
     for redshifts out to z = 1.0.  It has a method to interpolate the
     table in order to find a redshift for a given distance.
 
-    """
+    '''
     def __init__(self):
         self.redshifts = np.r_[0:1.0:100j]
 

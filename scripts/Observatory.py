@@ -1,22 +1,27 @@
-# Chris Layden
-
 """Classes and functions for synthetic photometry and noise characterization.
 
 Classes
-----------
+-------
 Sensor
+    Class specifying a photon-counting sensor.
 Telescope
+    Class specifying a telescope.
 Observatory
+    Class specifying a complete observatory.
+
+Functions
+---------
+blackbody_spec
+    Returns a blackbody spectrum with the desired properties.
 """
 
 import os
 import numpy as np
 import pysynphot as S
+import psfs
+import constants
 from redshift_lookup import RedshiftLookup
 from sky_background import bkg_spectrum
-from constants import *
-from psfs import *
-import matplotlib.pyplot as plt
 
 
 class Sensor(object):
@@ -249,12 +254,12 @@ class Observatory(object):
         pivot_wave = self.lambda_pivot(spectrum)
         if self.psf_sigma is not None:
             half_width = self.sensor.pix_size / 2
-            pix_frac = gaussian_ensq_energy(half_width, self.psf_sigma,
-                                            self.psf_sigma)
+            pix_frac = psfs.gaussian_ensq_energy(half_width, self.psf_sigma,
+                                                 self.psf_sigma)
         else:
             half_width = (np.pi * self.sensor.pix_size /
-                 (2 * self.telescope.f_num * pivot_wave * 10**-4))
-            pix_frac = airy_ensq_energy(half_width)
+                          (2 * self.telescope.f_num * pivot_wave * 10**-4))
+            pix_frac = psfs.airy_ensq_energy(half_width)
 
         signal = self.tot_signal(spectrum) * pix_frac
         return signal
@@ -409,7 +414,7 @@ class Observatory(object):
         return mag
 
     def avg_intensity_grid(self, spectrum, pos=np.array([0, 0]),
-                       subarray_size=11, resolution=11):
+                           subarray_size=11, resolution=11):
         """The average intensity across a subarray with sub-pixel resolution
 
         Parameters
@@ -425,13 +430,13 @@ class Observatory(object):
         # Simulate the PSF on a subarray of pixels, with sub-pixel resolution.
         if self.psf_sigma is not None:
             cov_mat = [[self.psf_sigma ** 2, 0], [0, self.psf_sigma ** 2]]
-            psf_grid = gaussian_psf(subarray_size, resolution,
-                                    self.sensor.pix_size, pos, cov_mat)
+            psf_grid = psfs.gaussian_psf(subarray_size, resolution,
+                                         self.sensor.pix_size, pos, cov_mat)
         else:
-            psf_grid = airy_disk(subarray_size, resolution,
-                                 self.sensor.pix_size, pos,
-                                 self.telescope.f_num,
-                                 self.lambda_pivot(spectrum))
+            psf_grid = psfs.airy_disk(subarray_size, resolution,
+                                      self.sensor.pix_size, pos,
+                                      self.telescope.f_num,
+                                      self.lambda_pivot(spectrum))
         intensity_grid = psf_grid * tot_signal
         return intensity_grid
 
@@ -449,7 +454,7 @@ class Observatory(object):
             central pixel.
         """
         base_grid = self.avg_intensity_grid(spectrum, pos, subarray_size,
-                                        resolution)
+                                            resolution)
         # Sum the signals within each pixel
         temp_grid = base_grid.reshape((11, resolution, 11, resolution))
         pixel_grid = temp_grid.sum(axis=(1, 3))
@@ -470,7 +475,7 @@ class Observatory(object):
         noise_per_pix = self.single_pix_noise()
         pixel_grid = self.obs_grid(spectrum, pos)
         # Determine the optimal aperture for the image
-        optimal_ap = optimal_aperture(pixel_grid, noise_per_pix)
+        optimal_ap = psfs.optimal_aperture(pixel_grid, noise_per_pix)
         n_aper = optimal_ap.sum()
         obs_grid = pixel_grid * optimal_ap
         signal = obs_grid.sum()
@@ -504,7 +509,8 @@ def blackbody_spec(temp, dist, l_bol):
     obs_flux = (spectrum.flux * (1+initial_z) / (1+obs_z)
                 * (10 ** -3 / dist) ** 2)
     # Scale the flux using the desired bolometric luminosity
-    l_bol_scaling = l_bol / (4 * np.pi * sigma * R_SUN ** 2 * temp ** 4)
+    l_bol_scaling = l_bol / (4 * np.pi * constants.sigma *
+                             constants.R_SUN ** 2 * temp ** 4)
     obs_flux *= l_bol_scaling
     obs_spectrum = S.ArraySpectrum(obs_wave, obs_flux,
                                    fluxunits=spectrum.fluxunits)
@@ -528,78 +534,15 @@ if __name__ == '__main__':
     flat_spec.convert('fnu')
 
     tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
-                            filter_bandpass=v_bandpass,
-                            exposure_time=300, num_exposures=3)
+                             filter_bandpass=v_bandpass,
+                             exposure_time=300, num_exposures=3)
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass, eclip_lat=90,
                                exposure_time=300, num_exposures=3)
 
     tess_geo_b = Observatory(telescope=mono_tele_v10, sensor=imx455,
-                            filter_bandpass=b_bandpass, eclip_lat=90,
-                            exposure_time=300, num_exposures=3)
-                         
+                             filter_bandpass=b_bandpass, eclip_lat=90,
+                             exposure_time=300, num_exposures=3)
 
-    v11_bandpass = S.UniformTransmission(0.54)
-    mono_tele_v11 = Telescope(diam=28.5, f_num=3.5, bandpass=v11_bandpass)
-
-    v3_bandpass = S.UniformTransmission(0.54)
-    mono_tele_v3 = Telescope(diam=8.5, f_num=3.5, bandpass=v3_bandpass)
-
-
-    imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
-    imx487 = Sensor(pix_size=2.74, read_noise=2.51, dark_current=5**-4,
-                full_well=100000, qe=imx487_qe)
-
-    data_folder = os.path.dirname(__file__) + '/../data/'
-    uv_filter = S.FileBandpass(data_folder + "uv_200_300.fits")
-    airy_fwhm = 1.025 * 2500 * 3.5 / 10 ** 4
-    # Factor of 2 because PSF is ~twice diffraction limited
-    uv_sigma = 2 * airy_fwhm / 2.355
-
-    tess_geo_v11 = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter, exposure_time=60,
-                            num_exposures=1, psf_sigma=uv_sigma, eclip_lat=90)
-
-    tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter, exposure_time=60,
-                            num_exposures=4, psf_sigma=uv_sigma, eclip_lat=90)
-
-    print(tess_geo_v11.limiting_mag())
-
-    # mag_list = range(5, 26)
-    # obs_list = [tess_geo_v11, tess_geo_v3]
-    # obs_name_list = ["28.5 cm", r"8.5 cm ($\times$4)"]
-    # phot_prec_list = np.zeros((len(obs_list), len(mag_list)))
-    # # psf_sigma_list = [None, 2, 4, 6]
-    # # For UV
-    # psf_sigma_list = [None, uv_sigma, 2, 4, 6]
-    # # psf_sigma_name_list = ["~1.5 (Airy Disk)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
-    # # psf_sigma_name_list = ["~1.8 (Airy Disk)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
-    # psf_sigma_name_list = ["~0.5 (Airy Disk)", "1 (Gaussian)", "2 (Gaussian)", "4 (Gaussian)", "6 (Gaussian)"]
-    # phot_prec_list = np.zeros((len(psf_sigma_list), len(mag_list)))
-    
-    # # for i, psf_sigma in enumerate(psf_sigma_list):
-    # #     tess_geo_v11.psf_sigma = psf_sigma
-    # #     obs = tess_geo_v11
-    # for i, obs in enumerate(obs_list):
-        
-    #     for j, mag in enumerate(mag_list):
-    #         mag_sp = S.FlatSpectrum(fluxdensity=mag, fluxunits='abmag')
-    #         mag_sp.convert('fnu')
-    #         snr = obs.snr(mag_sp)
-    #         phot_prec = 10 ** 6 / snr
-    #         phot_prec_list[i][j] = phot_prec
-    #     plt.plot(mag_list, phot_prec_list[i])
-
-    
-    # detection_limit = 10 ** 6 / 5
-    # plt.axhline(y = detection_limit, color = 'k',
-    #             linestyle = '--')
-    # plt.annotate(r'5-$\sigma$ Detection', [10, detection_limit*1.5])
-    # # plt.legend(psf_sigma_name_list, title=r'PSF $\sigma$ (um)')
-    # plt.legend(obs_name_list, title='Telescope Diamter')
-    # plt.yscale('log')
-    # plt.ylim(10, 10 ** 6)
-    # plt.xlabel('AB Magnitude')
-    # plt.ylabel('Photometric Precision (ppm)')
-    # plt.title("UV-Band Non-Jitter Photometric Precision at 60 sec")
-    # plt.show()
+    print(tess_geo_b.limiting_mag())
