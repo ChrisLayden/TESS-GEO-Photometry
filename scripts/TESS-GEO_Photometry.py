@@ -4,7 +4,7 @@ import os
 import tkinter as tk
 import pysynphot as S
 from observatory import Sensor, Telescope, Observatory, blackbody_spec
-from instruments import sensor_dict, telescope_dict
+from instruments import sensor_dict, telescope_dict, filter_dict
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -111,9 +111,7 @@ class MyGUI:
         self.obs_vars[2].set(5)
         self.obs_vars[3].set(90)
         self.obs_labels[-1].grid(row=15, column=0, padx=padx, pady=pady)
-        self.filter_options = ['None', 'Johnson U', 'Johnson B',
-                               'Johnson V', 'Johnson R', 'Johnson I',
-                               'UV (200-300 nm)']
+        self.filter_options = list(filter_dict.keys())
         self.filter_default = tk.StringVar()
         self.filter_default.set('None')
         self.filter_menu = tk.OptionMenu(self.root, self.filter_default,
@@ -247,14 +245,7 @@ class MyGUI:
         num_exposures = self.obs_vars[1].get()
         limiting_snr = self.obs_vars[2].get()
         eclip_angle = self.obs_vars[3].get()
-        if self.filter_default.get() == 'None':
-            filter_bp = S.UniformTransmission(1)
-        elif self.filter_default.get()[0] == 'J':
-            filter_name = self.filter_default.get()
-            filter_str = 'johnson,' + filter_name[-1].lower()
-            filter_bp = S.ObsBandpass(filter_str)
-        elif self.filter_default.get() == 'UV (200-300 nm)':
-            filter_bp = S.FileBandpass(data_folder + 'uv_200_300.fits')
+        filter_bp = filter_dict[self.filter_default.get()]
         observatory = Observatory(sens, tele, exposure_time=exposure_time,
                                   num_exposures=num_exposures,
                                   limiting_s_n=limiting_snr,
