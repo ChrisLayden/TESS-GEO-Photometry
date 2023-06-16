@@ -5,7 +5,7 @@
 import os
 import pysynphot as S
 import numpy as np
-from observatory import Sensor, Telescope, Observatory
+from observatory import Sensor, Telescope
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -45,20 +45,6 @@ mono_tele_v3 = Telescope(diam=8.5, f_num=3.5, bandpass=v3_bandpass)
 # Transmission is scaled to give 15,000 e-/s from a mag 10 star
 tess_tele_thru = S.UniformTransmission(0.6315)
 tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
-
-
-data_folder = os.path.dirname(__file__) + '/../data/'
-uv_filter = S.FileBandpass(data_folder + 'uv_200_300.fits')
-AIRY_FWHM = 1.025 * 2500 * 3.5 / 10 ** 4
-UV_SIGMA = 2 * AIRY_FWHM / 2.355
-tess_geo_v3 = Observatory(imx487, mono_tele_v3, filter_bandpass=uv_filter,
-                          exposure_time=1, num_exposures=1,
-                          psf_sigma=UV_SIGMA)
-flat_spec = S.FlatSpectrum(16.6, fluxunits='abmag')
-
-tess_geo_v11 = Observatory(imx487, mono_tele_v11, filter_bandpass=uv_filter,
-                           exposure_time=60, num_exposures=1,
-                           psf_sigma=UV_SIGMA)
 
 telescope_dict = {'Mono Tele V10 (Visible)': mono_tele_v10,
                   'Mono Tele V11 (UV)': mono_tele_v11,

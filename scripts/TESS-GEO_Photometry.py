@@ -3,6 +3,7 @@
 import os
 import tkinter as tk
 import pysynphot as S
+from spectra import *
 from observatory import Sensor, Telescope, Observatory, blackbody_spec
 from instruments import sensor_dict, telescope_dict, filter_dict
 
@@ -40,6 +41,11 @@ class MyGUI:
                                             textvariable=self.sens_vars[i]))
             self.sens_boxes[i].grid(row=i+1, column=1, padx=padx, pady=pady)
 
+        self.sens_vars[0].set(5)
+        self.sens_vars[1].set(3)
+        self.sens_vars[2].set(0.01)
+        self.sens_vars[3].set(1)
+        self.sens_vars[4].set(100000)
         # If you want to select a default sensor
         self.sens_menu_header = tk.Label(self.root, text='Or Choose Sensor',
                                          font=['Arial', 16, 'bold'])
@@ -71,6 +77,10 @@ class MyGUI:
             self.tele_boxes.append(tk.Entry(self.root, width=10,
                                             textvariable=self.tele_vars[i]))
             self.tele_boxes[i].grid(row=i+7, column=1, padx=padx, pady=pady)
+
+        self.tele_vars[0].set(10)
+        self.tele_vars[1].set(10)
+        self.tele_vars[2].set(1)
 
         # If you want to select a default telescope
         self.tele_menu_header = tk.Label(self.root, text='Or Choose Telescope',
@@ -171,14 +181,13 @@ class MyGUI:
 
         self.user_spec_bool = tk.BooleanVar()
         self.user_spec_check = tk.Checkbutton(self.root,
-                                              text='Spectrum with file name',
+                                              text='Spectrum named',
                                               variable=self.user_spec_bool)
         self.user_spec_check.grid(row=5, column=4, padx=padx, pady=pady)
         user_spec_label = tk.Label(self.root,
-                                   text='(Units: Ang, erg/s/cm^2/Ang)')
-        user_spec_label.grid(row=6, column=4, padx=padx)
+                                   text='(Spectrum must be in spectra.py)')
+        user_spec_label.grid(row=6, column=5, padx=padx)
         self.user_spec_name = tk.StringVar()
-        self.user_spec_name.set('Not implemented yet')
         self.user_spec_entry = tk.Entry(self.root, width=20,
                                         textvariable=self.user_spec_name)
         self.user_spec_entry.grid(row=5, column=5, padx=padx, pady=pady)
@@ -219,8 +228,9 @@ class MyGUI:
         self.sens_vars[1].set(self.sens.read_noise)
         self.sens_vars[2].set(self.sens.dark_current)
         self.sens_vars[4].set(self.sens.full_well)
-        self.sens_boxes[3].delete(0, 10)
-        self.sens_boxes[3].insert(0, 'ARRAY')
+        self.sens_vars[3] = tk.StringVar()
+        self.sens_boxes[3].config(textvariable=self.sens_vars[3])
+        self.sens_vars[3].set('ARRAY')
 
     def set_tele(self, *args):
         self.tele = telescope_dict[self.tele_default.get()]
@@ -232,12 +242,15 @@ class MyGUI:
         self.tele_vars[2].set(self.tele.bandpass)
 
     def set_obs(self):
-        try:
-            sens_vars = [i.get() for i in self.sens_vars]
-            sens_vars[3] = S.UniformTransmission(sens_vars[3])
-            sens = Sensor(*sens_vars)
-        except tk.TclError:
-            sens = self.sens
+        # try:
+        sens_vars = [i.get() for i in self.sens_vars]
+        if sens_vars[3] == 'ARRAY':
+            sens_vars[3] = self.sens.qe
+        else:
+            sens_vars[3] = S.UniformTransmission(float(sens_vars[3]))
+        sens = Sensor(*sens_vars)
+        # except tk.TclError:
+        #     sens = self.sens
         tele_vars = [i.get() for i in self.tele_vars]
         tele_vars[2] = S.UniformTransmission(tele_vars[2])
         tele = Telescope(*tele_vars)
@@ -298,9 +311,9 @@ class MyGUI:
             distance = self.bb_distance.get()
             l_bol = self.bb_lbol.get()
             spectrum = blackbody_spec(temp, distance, l_bol)
-
         elif self.user_spec_bool.get():
-            print('Not functional yet')
+            spectrum_name = self.user_spec_name.get()
+            spectrum = eval(spectrum_name)
         else:
             raise 'No spectrum specified'
         return spectrum
@@ -308,8 +321,8 @@ class MyGUI:
     def calc_signal(self):
         spectrum = self.set_spectrum()
         observatory = self.set_obs()
-        tot_sig = observatory.tot_signal(spectrum) * observatory.num_exposures
-        return int(round(tot_sig))
+        signal = observatory.observation(spectrum)[0]
+        return int(round(signal))
 
     def calc_snr(self):
         spectrum = self.set_spectrum()

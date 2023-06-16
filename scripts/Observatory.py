@@ -42,7 +42,8 @@ class Sensor(object):
         The full well (in e-) of each sensor pixel.
     """
 
-    def __init__(self, pix_size, read_noise, dark_current, full_well, qe=1):
+    def __init__(self, pix_size, read_noise, dark_current,
+                 qe=S.UniformTransmission(1), full_well=100000):
         """Initialize a Sensor object.
 
         Parameters
@@ -207,7 +208,15 @@ class Observatory(object):
                        self.telescope.bandpass.wave, spectrum.wave]
         binset_list = [x for x in binset_list if x is not None]
         range_list = [np.ptp(x) for x in binset_list]
-        return binset_list[np.argmin(range_list)]
+        obs_binset = binset_list[np.argmin(range_list)]
+        # Avoid bug when all throughputs are flat
+        all_flat_q = (np.all((self.filter_bandpass.wave is None)) and
+                      np.all((self.sensor.qe.wave is None)) and
+                      np.all(self.telescope.bandpass.wave is None))
+        if all_flat_q:
+            array_bp = S.ArrayBandpass(obs_binset, np.ones(len(obs_binset)))
+            self.bandpass = self.bandpass * array_bp
+        return obs_binset
         # return spectrum.wave
 
     def tot_signal(self, spectrum):
@@ -273,8 +282,8 @@ class Observatory(object):
         bkg_noise = np.sqrt(self.bkg_per_pix())
 
         # Add noise in quadrature
-        noise = np.sqrt(dark_current_noise ** 2 +
-                        self.sensor.read_noise ** 2 + bkg_noise ** 2
+        noise = np.sqrt(dark_current_noise ** 2 + bkg_noise ** 2 +
+                        self.sensor.read_noise ** 2
                         )
 
         return noise
@@ -348,7 +357,8 @@ class Observatory(object):
     def limiting_mag(self):
         """The limiting AB magnitude for the observatory."""
         # We use an aperture of just 1 pixel, as this is the optimal
-        # aperture for very dark objects.
+        # aperture for very dark objects, especially for an undersampled
+        # system.
         mag_10_spectrum = S.FlatSpectrum(10, fluxunits='abmag')
         mag_10_spectrum.convert('fnu')
         mag_10_signal = self.single_pix_signal(mag_10_spectrum)
@@ -460,6 +470,40 @@ class Observatory(object):
         pixel_grid = temp_grid.sum(axis=(1, 3))
         return pixel_grid
 
+    def observation(self, spectrum, pos=np.array([0, 0])):
+        '''The optimal image, signal, and noise observed for a spectrum.
+
+        Parameters
+        ----------
+        spectrum: pysynphot.spectrum object
+            The spectrum for which to calculate the image.
+        pos: array-like (default [0, 0])
+            The centroid position of the source on the subarray, in
+            microns, with [0,0] representing the center of the
+            central pixel.
+
+        Returns
+        -------
+        signal: float
+            The total signal in the optimal aperture, in e-
+        noise: float
+            The total noise in the optimal aperture, in e-
+        image: 2D array
+            The image of the source, in e-/pix
+        '''
+        noise_per_pix = self.single_pix_noise()
+        pixel_grid = self.obs_grid(spectrum, pos)
+        # Determine the optimal aperture for the image
+        optimal_ap = psfs.optimal_aperture(pixel_grid, noise_per_pix)
+        print(optimal_ap)
+        n_aper = optimal_ap.sum()
+        obs_grid = pixel_grid * optimal_ap
+        frame_signal = obs_grid.sum()
+        signal = frame_signal * self.num_exposures
+        noise = np.sqrt(signal +
+                        self.num_exposures * n_aper * noise_per_pix ** 2)
+        return (signal, noise, obs_grid)
+
     def snr(self, spectrum, pos=np.array([0, 0])):
         """The snr of a given spectrum, using the optimal aperture.
 
@@ -471,16 +515,14 @@ class Observatory(object):
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
             central pixel.
+
+        Returns
+        -------
+        snr: float
+            The signal to noise ratio for the spectrum.
         """
-        noise_per_pix = self.single_pix_noise()
-        pixel_grid = self.obs_grid(spectrum, pos)
-        # Determine the optimal aperture for the image
-        optimal_ap = psfs.optimal_aperture(pixel_grid, noise_per_pix)
-        n_aper = optimal_ap.sum()
-        obs_grid = pixel_grid * optimal_ap
-        signal = obs_grid.sum()
-        noise = np.sqrt(signal + (n_aper * noise_per_pix) ** 2)
-        snr = signal / noise * np.sqrt(self.num_exposures)
+        (signal, noise, obs_grid) = self.observation(spectrum, pos)
+        snr = signal / noise
         return snr
 
 
@@ -533,16 +575,16 @@ if __name__ == '__main__':
     flat_spec = S.FlatSpectrum(25, fluxunits='abmag')
     flat_spec.convert('fnu')
 
-    tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
-                             filter_bandpass=v_bandpass,
-                             exposure_time=300, num_exposures=3)
+    # tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
+    #                          filter_bandpass=v_bandpass,
+    #                          exposure_time=300, num_exposures=3)
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass, eclip_lat=90,
                                exposure_time=300, num_exposures=3)
 
-    tess_geo_b = Observatory(telescope=mono_tele_v10, sensor=imx455,
-                             filter_bandpass=b_bandpass, eclip_lat=90,
-                             exposure_time=300, num_exposures=3)
+    # tess_geo_b = Observatory(telescope=mono_tele_v10, sensor=imx455,
+    #                          filter_bandpass=b_bandpass, eclip_lat=90,
+    #                          exposure_time=300, num_exposures=3)
 
-    print(tess_geo_b.limiting_mag())
+    print(tess_geo_obs.limiting_mag())

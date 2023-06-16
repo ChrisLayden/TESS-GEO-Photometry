@@ -23,9 +23,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pysynphot as S
 import psfs
+import time
+from tools import FakeLC
 from observatory import Observatory
 from instruments import sensor_dict, telescope_dict
-import time
 from multiprocessing import Pool
 from functools import partial
 from matplotlib.animation import FuncAnimation
@@ -298,6 +299,11 @@ def multithread_signal_list(observatory, obs_duration, jitter, spectrum_list):
     stds_list = np.std(out_list, axis=1)
     return means_list, stds_list
 
+my_lc = FakeLC(2, 100.0, 1.)
+x = np.r_[0:1000:5000j]
+y = my_lc(x)
+plt.plot(x,y,'k.-')
+
 
 if __name__ == '__main__':
     filter_bp = S.UniformTransmission(1.0)
@@ -314,12 +320,12 @@ if __name__ == '__main__':
 
     jitter = 0.0
 
-    t0 = time.time()
-    sig_list = signal_list(tess_geo_obs, 300, jitter, mag_sp)
-    t1 = time.time()
-    phot_prec = np.std(sig_list) / np.mean(sig_list) * 10 ** 6
-    print("Photometric Precision for mag", mag, ": ",
-          format(phot_prec, '4.0f'), "ppm")
+    # t0 = time.time()
+    # sig_list = signal_list(tess_geo_obs, 300, jitter, mag_sp)
+    # t1 = time.time()
+    # phot_prec = np.std(sig_list) / np.mean(sig_list) * 10 ** 6
+    # print("Photometric Precision for mag", mag, ": ",
+    #       format(phot_prec, '4.0f'), "ppm")
 
     # mag_list = range(6, 23, 2)
     # sp_list = []
@@ -345,7 +351,7 @@ if __name__ == '__main__':
     #       format((t3 - t2) / len(mag_list),'4.3f'))
 
     # Run animation
-    base_grid = tess_geo_obs.avg_intensity_grid(mag_sp, pos=[0, 0],
-                                                subarray_size=sub_size,
-                                                resolution=resolution)
-    jitter_animation(base_grid, exposure_time=60, jitter=0.5)
+    # base_grid = tess_geo_obs.avg_intensity_grid(mag_sp, pos=[0, 0],
+    #                                             subarray_size=sub_size,
+    #                                             resolution=resolution)
+    # jitter_animation(base_grid, exposure_time=60, jitter=0.5)
