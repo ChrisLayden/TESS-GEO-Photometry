@@ -234,7 +234,7 @@ class MyGUI:
 
     def set_tele(self, *args):
         self.tele = telescope_dict[self.tele_default.get()]
-        if self.tele_default.get() == "Mono Tele V11 (UV)":
+        if self.tele_default.get() == 'Mono Tele V11 (UV)':
             # ~2 times the diffraction limit for f/3.5
             self.psf_sigma = 0.76
         self.tele_vars[0].set(self.tele.diam)
@@ -342,7 +342,7 @@ class MyGUI:
         snr = self.calc_snr()
         phot_prec = 10 ** 6 / snr
         self.phot_prec_label.config(text='Photometric Precision: ' +
-                                    format(phot_prec, '4.3f') + " ppm")
+                                    format(phot_prec, '4.3f') + ' ppm')
 
 
 MyGUI()

@@ -1,4 +1,4 @@
-"""Classes and functions for synthetic photometry and noise characterization.
+'''Classes and functions for synthetic photometry and noise characterization.
 
 Classes
 -------
@@ -13,7 +13,7 @@ Functions
 ---------
 blackbody_spec
     Returns a blackbody spectrum with the desired properties.
-"""
+'''
 
 import os
 import numpy as np
@@ -25,7 +25,7 @@ from sky_background import bkg_spectrum
 
 
 class Sensor(object):
-    """Class specifying a photon-counting sensor.
+    '''Class specifying a photon-counting sensor.
 
     Attributes
     ----------
@@ -40,11 +40,11 @@ class Sensor(object):
         The sensor quantum efficiency as a function of wavelength
     full_well: int
         The full well (in e-) of each sensor pixel.
-    """
+    '''
 
     def __init__(self, pix_size, read_noise, dark_current,
                  qe=S.UniformTransmission(1), full_well=100000):
-        """Initialize a Sensor object.
+        '''Initialize a Sensor object.
 
         Parameters
         ----------
@@ -58,7 +58,7 @@ class Sensor(object):
             The sensor quantum efficiency as a function of wavelength
         full_well: int
             The full well (in e-) of each sensor pixel.
-        """
+        '''
 
         self.pix_size = pix_size
         self.read_noise = read_noise
@@ -68,7 +68,7 @@ class Sensor(object):
 
 
 class Telescope(object):
-    """Class specifying a telescope.
+    '''Class specifying a telescope.
 
     Attributes
     ----------
@@ -84,9 +84,9 @@ class Telescope(object):
         The focal length of the telescope, in cm
     plate_scale: float
         The focal plate scale, in um/arcsec
-    """
+    '''
     def __init__(self, diam, f_num, bandpass=1):
-        """Initializing a telescope object.
+        '''Initializing a telescope object.
 
         Parameters
         ----------
@@ -99,7 +99,7 @@ class Telescope(object):
             accounting for throughput and any geometric blocking
             factor
 
-        """
+        '''
 
         self.diam = diam
         self.f_num = f_num
@@ -109,7 +109,7 @@ class Telescope(object):
 
 
 class Observatory(object):
-    """Class specifying a complete observatory.
+    '''Class specifying a complete observatory.
 
     Attributes
     ----------
@@ -154,13 +154,13 @@ class Observatory(object):
     limiting_mag():
         Returns the maximum AB magnitude that the
         observatory can detect in one stacked image.
-    """
+    '''
 
     def __init__(
             self, sensor, telescope, filter_bandpass=1,
             exposure_time=1., num_exposures=1, eclip_lat=90,
             limiting_s_n=5., psf_sigma=None):
-        """Initialize Observatory class attributes.
+        '''Initialize Observatory class attributes.
 
         Parameters
         ----------
@@ -184,7 +184,7 @@ class Observatory(object):
             limited with an Airy disk PSF and set psf_sigma to
             be the diffraction limit (1.22*lambda*fnum) within
             class methods.
-        """
+        '''
 
         self.sensor = sensor
         self.telescope = telescope
@@ -203,7 +203,7 @@ class Observatory(object):
         self.bkg_noise = self.bkg_per_pix()
 
     def binset(self, spectrum):
-        """Narrowest binset from telescope, sensor, filter, and spectrum."""
+        '''Narrowest binset from telescope, sensor, filter, and spectrum.'''
         binset_list = [self.filter_bandpass.wave, self.sensor.qe.wave,
                        self.telescope.bandpass.wave, spectrum.wave]
         binset_list = [x for x in binset_list if x is not None]
@@ -220,13 +220,13 @@ class Observatory(object):
         # return spectrum.wave
 
     def tot_signal(self, spectrum):
-        """The total number of electrons generated in one exposure.
+        '''The total number of electrons generated in one exposure.
 
         Parameters
         ----------
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the signal.
-        """
+        '''
         S.setref(area=np.pi * self.telescope.diam ** 2/4)
         obs_binset = self.binset(spectrum)
         obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
@@ -236,7 +236,7 @@ class Observatory(object):
         return signal
 
     def bkg_per_pix(self):
-        """The background noise per pixel, in e-/pix."""
+        '''The background noise per pixel, in e-/pix.'''
         bkg_wave, bkg_ilam = bkg_spectrum(self.eclip_lat)
         bkg_flam = bkg_ilam * self.pix_scale ** 2
         bkg_sp = S.ArraySpectrum(bkg_wave, bkg_flam, fluxunits='flam')
@@ -244,7 +244,7 @@ class Observatory(object):
         return bkg_signal
 
     def lambda_pivot(self, spectrum):
-        """The pivot wavelength for observation of a given spectrum."""
+        '''The pivot wavelength for observation of a given spectrum.'''
         obs_binset = self.binset(spectrum)
         S.setref(area=np.pi * self.telescope.diam ** 2/4)
         obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
@@ -252,13 +252,13 @@ class Observatory(object):
         return obs.pivot()
 
     def single_pix_signal(self, spectrum):
-        """The signal within the central pixel of an image.
+        '''The signal within the central pixel of an image.
 
         Parameters
         ----------
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the signal.
-        """
+        '''
 
         pivot_wave = self.lambda_pivot(spectrum)
         if self.psf_sigma is not None:
@@ -274,7 +274,7 @@ class Observatory(object):
         return signal
 
     def single_pix_noise(self):
-        """The noise from the background and sensor, in e-/pix."""
+        '''The noise from the background and sensor, in e-/pix.'''
         # Noise from sensor dark current
         dark_current_noise = np.sqrt(self.sensor.dark_current *
                                      self.exposure_time)
@@ -289,13 +289,13 @@ class Observatory(object):
         return noise
 
     def single_pix_snr(self, spectrum):
-        """The SNR for a given source with a single-pixel aperature.
+        '''The SNR for a given source with a single-pixel aperature.
 
         Parameters
         ----------
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the SNR.
-        """
+        '''
 
         signal = self.single_pix_signal(spectrum)
         noise = np.sqrt(signal + self.single_pix_noise() ** 2)
@@ -304,7 +304,7 @@ class Observatory(object):
         return stack_snr
 
     def limiting_dist(self, spectrum, initial_dist):
-        """Returns the max distance at which a source can be detected, in Mpc.
+        '''Returns the max distance at which a source can be detected, in Mpc.
 
         Parameters
         ----------
@@ -313,13 +313,13 @@ class Observatory(object):
         initial_dist: float
             The luminosity distance at which the spectrum is
             specified, in Mpc.
-        """
+        '''
 
         ztab = RedshiftLookup()
         initial_sp = spectrum if spectrum is not None else self.spectrum
 
         def s_n_diff_dist(obs_dist):
-            """The difference between S/N at obs_dist and the limiting S/N."""
+            '''The difference between S/N at obs_dist and the limiting S/N.'''
             initial_z = ztab(initial_dist)
             obs_z = ztab(obs_dist)
             # Adjust the wavelengths of the source spectrum to account for
@@ -355,7 +355,7 @@ class Observatory(object):
         return dist
 
     def limiting_mag(self):
-        """The limiting AB magnitude for the observatory."""
+        '''The limiting AB magnitude for the observatory.'''
         # We use an aperture of just 1 pixel, as this is the optimal
         # aperture for very dark objects, especially for an undersampled
         # system.
@@ -365,7 +365,7 @@ class Observatory(object):
         pix_noise = self.single_pix_noise()
 
         def s_n_diff_mag(mag):
-            """The difference between the S/N at mag and the limiting S/N."""
+            '''The difference between the S/N at mag and the limiting S/N.'''
             signal = mag_10_signal * 10 ** ((10 - mag) / 2.5)
             noise = np.sqrt(signal + pix_noise ** 2)
             snr = signal / noise * np.sqrt(self.num_exposures)
@@ -392,14 +392,14 @@ class Observatory(object):
         return mag
 
     def saturating_mag(self):
-        """The saturating AB magnitude for the observatory."""
+        '''The saturating AB magnitude for the observatory.'''
         # We consider just the central pixel, which will saturate first.
         mag_10_spectrum = S.FlatSpectrum(10, fluxunits='abmag')
         mag_10_spectrum.convert('fnu')
         mag_10_signal = self.single_pix_signal(mag_10_spectrum)
 
         def saturation_diff(mag):
-            """Difference between the pixel signal and full well capacity."""
+            '''Difference between the pixel signal and full well capacity.'''
             signal = mag_10_signal * 10 ** ((10 - mag) / 2.5)
             return signal - self.sensor.full_well
 
@@ -425,7 +425,7 @@ class Observatory(object):
 
     def avg_intensity_grid(self, spectrum, pos=np.array([0, 0]),
                            subarray_size=11, resolution=11):
-        """The average intensity across a subarray with sub-pixel resolution
+        '''The average intensity across a subarray with sub-pixel resolution
 
         Parameters
         ----------
@@ -435,7 +435,7 @@ class Observatory(object):
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
             central pixel.
-        """
+        '''
         tot_signal = self.tot_signal(spectrum)
         # Simulate the PSF on a subarray of pixels, with sub-pixel resolution.
         if self.psf_sigma is not None:
@@ -452,7 +452,7 @@ class Observatory(object):
 
     def obs_grid(self, spectrum, pos=np.array([0, 0]),
                  subarray_size=11, resolution=11):
-        """The intensity (in electrons) across a 9x9 pixel subarray
+        '''The intensity (in electrons) across a 9x9 pixel subarray
 
         Parameters
         ----------
@@ -462,7 +462,7 @@ class Observatory(object):
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
             central pixel.
-        """
+        '''
         base_grid = self.avg_intensity_grid(spectrum, pos, subarray_size,
                                             resolution)
         # Sum the signals within each pixel
@@ -495,7 +495,6 @@ class Observatory(object):
         pixel_grid = self.obs_grid(spectrum, pos)
         # Determine the optimal aperture for the image
         optimal_ap = psfs.optimal_aperture(pixel_grid, noise_per_pix)
-        print(optimal_ap)
         n_aper = optimal_ap.sum()
         obs_grid = pixel_grid * optimal_ap
         frame_signal = obs_grid.sum()
@@ -505,7 +504,7 @@ class Observatory(object):
         return (signal, noise, obs_grid)
 
     def snr(self, spectrum, pos=np.array([0, 0])):
-        """The snr of a given spectrum, using the optimal aperture.
+        '''The snr of a given spectrum, using the optimal aperture.
 
         Parameters
         ----------
@@ -520,14 +519,14 @@ class Observatory(object):
         -------
         snr: float
             The signal to noise ratio for the spectrum.
-        """
+        '''
         (signal, noise, obs_grid) = self.observation(spectrum, pos)
         snr = signal / noise
         return snr
 
 
 def blackbody_spec(temp, dist, l_bol):
-    """Returns a blackbody spectrum with the desired properties.
+    '''Returns a blackbody spectrum with the desired properties.
 
         Parameters
         ----------
@@ -538,7 +537,7 @@ def blackbody_spec(temp, dist, l_bol):
             specified, in Mpc.
         l_bol: float
             The bolometric luminosity of the source.
-        """
+        '''
     # A default pysynphot blackbody is at 1 kpc and for a star with
     # radius r_sun
     spectrum = S.BlackBody(temp)

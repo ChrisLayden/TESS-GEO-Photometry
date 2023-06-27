@@ -5,7 +5,7 @@ import scipy as sp
 from scipy import optimize,linalg
 from scipy.interpolate import interp1d,interp2d
 from scipy.interpolate import splrep, splev
-from scipy.integrate import quad
+from scipy.integrate import quad, simpson
 import matplotlib.pyplot as plt
 import scipy.fftpack as fft
 
@@ -246,20 +246,31 @@ class FakeLC(object):
         #set the mean to 0
         f[0] = 0.0
 
+        # sigma = np.sqrt(simpson(p, feval))
+        # print(sigma)
+        
+        # y = fft.ifft(p).real
+        # print(y)
+
+        # plt.plot(feval, p)
+        # plt.xscale('log')
+        # plt.yscale('log')
+        # plt.show()
+
         y = fft.ifft(f*(2*npoints - 1))
-        #take out the scaling
+        # take out the scaling
         y = 2*(y.real - y.real.min())/(y.real.max() - y.real.min()) - 1 
         tout = np.r_[t[0] : t[-1] + tstep : tstep]
         interp = interp1d(tout,y)
 
         return interp(t)
 
-my_lc = FakeLC(2, 0.001, 1)
-x = np.r_[0:10:10000j]
+my_lc = FakeLC(2, 0.001, 1000)
+x = np.r_[0:10000:10000j]
 y = my_lc(x)
+print(np.std(y))
 plt.plot(x,y,'k.-')
 plt.show()
-
 
 
 class RandomField(object):
