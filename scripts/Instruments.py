@@ -24,13 +24,25 @@ ultrasat_qe = S.ArrayBandpass(ultrasat_arr[:, 0], ultrasat_arr[:, 1])
 ultrasat_cmos = Sensor(pix_size=9.5, read_noise=3.5, dark_current=0.026,
                        full_well=100000, qe=ultrasat_qe)
 
+imx990_arr = np.genfromtxt(data_folder + 'imx990_QE.csv', delimiter=',')
+# Multiply the first column by 10 to convert from nm to Angstroms
+imx990_arr[:, 0] *= 10
+imx990_qe = S.ArrayBandpass(imx990_arr[:, 0], imx990_arr[:, 1])
+# Lowest gain mode at -30 deg C
+imx990_low_gain = Sensor(pix_size=5, read_noise=150, dark_current=47.7,
+                full_well=120000, qe=imx990_qe)
+# Highest gain mode at -60 deg C
+imx990 = Sensor(pix_size=5, read_noise=20, dark_current=10,
+                full_well=2000, qe=imx990_qe)
+
 tess_qe = S.FileBandpass(data_folder + 'tess.fits')
 # This dark current is just a place holder; it's negligible anyways
 tesscam = Sensor(pix_size=15, read_noise=10, dark_current=5**-4,
                  full_well=200000, qe=tess_qe)
 
 sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
-               'TESS CCD': tesscam, 'ULTRASAT CMOS': ultrasat_cmos}
+               'TESS CCD': tesscam, 'ULTRASAT CMOS': ultrasat_cmos,
+               'IMX 990 (SWIR)': imx990}
 
 # Defining telescopes
 v10_bandpass = S.UniformTransmission(0.693)
@@ -59,6 +71,13 @@ johnson_v = S.ObsBandpass('johnson,v')
 johnson_r = S.ObsBandpass('johnson,r')
 johnson_i = S.ObsBandpass('johnson,i')
 uv_80 = S.FileBandpass(data_folder + 'uv_200_300.fits')
+# Array with uniform total transmission 9000-17000 ang
+swir_wave = np.arange(9000, 17000, 100)
+swir_thru = np.ones(len(swir_wave))
+swir_filt_arr = np.array([swir_wave, swir_thru]).T
+# Pad with zeros at 8900 and 17100 ang
+swir_filt_arr = np.vstack(([8900, 0], swir_filt_arr, [17100, 0]))
+swir_filter = S.ArrayBandpass(swir_filt_arr[:, 0], swir_filt_arr[:, 1])
 
 ultrasat_filt_arr = np.genfromtxt(data_folder + 'ULTRASAT_Filter.csv',
                                   delimiter=',')
@@ -68,4 +87,5 @@ ultrasat_filter = S.ArrayBandpass(ultrasat_filt_arr[:, 0],
 filter_dict = {'None': no_filter, 'Johnson U': johnson_u,
                'Johnson B': johnson_b, 'Johnson V': johnson_v,
                'Johnson R': johnson_r, 'Johnson I': johnson_i,
-               '200-300 nm 80%': uv_80, 'ULTRASAT': ultrasat_filter}
+               '200-300 nm 80%': uv_80, 'ULTRASAT': ultrasat_filter,
+               'SWIR (900-1700 nm 100%': swir_filter}
