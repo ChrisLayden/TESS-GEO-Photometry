@@ -5,7 +5,8 @@
 import os
 import pysynphot as S
 import numpy as np
-from observatory import Sensor, Telescope
+from observatory import Observatory, Sensor, Telescope
+import matplotlib.pyplot as plt
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -49,16 +50,20 @@ v10_bandpass = S.UniformTransmission(0.693)
 mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
 
 v11_bandpass = S.UniformTransmission(0.54)
-mono_tele_v11 = Telescope(diam=28.5, f_num=3.5, bandpass=v11_bandpass)
+mono_tele_v11 = Telescope(diam=28.3, f_num=3.5, bandpass=v11_bandpass)
 
 v3_bandpass = S.UniformTransmission(0.54)
 mono_tele_v3 = Telescope(diam=8.5, f_num=3.5, bandpass=v3_bandpass)
+
+v3_bandpass = S.UniformTransmission(0.54)
+mono_tele_v10uv = Telescope(diam=25, f_num=4.8, bandpass=v3_bandpass)
 
 # Transmission is scaled to give 15,000 e-/s from a mag 10 star
 tess_tele_thru = S.UniformTransmission(0.6315)
 tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
 
 telescope_dict = {'Mono Tele V10 (Visible)': mono_tele_v10,
+                  'Mono Tele V10 (UV)': mono_tele_v10uv,
                   'Mono Tele V11 (UV)': mono_tele_v11,
                   'Mono Tele V3 (UV)': mono_tele_v3,
                   'TESS Telescope (IR)': tess_tele}
@@ -70,6 +75,7 @@ johnson_b = S.ObsBandpass('johnson,b')
 johnson_v = S.ObsBandpass('johnson,v')
 johnson_r = S.ObsBandpass('johnson,r')
 johnson_i = S.ObsBandpass('johnson,i')
+johnson_j = S.ObsBandpass('johnson,j')
 uv_80 = S.FileBandpass(data_folder + 'uv_200_300.fits')
 # Array with uniform total transmission 9000-17000 ang
 swir_wave = np.arange(9000, 17000, 100)
@@ -84,8 +90,15 @@ ultrasat_filt_arr = np.genfromtxt(data_folder + 'ULTRASAT_Filter.csv',
 ultrasat_filter = S.ArrayBandpass(ultrasat_filt_arr[:, 0],
                                   ultrasat_filt_arr[:, 1] / 100)
 
+
 filter_dict = {'None': no_filter, 'Johnson U': johnson_u,
                'Johnson B': johnson_b, 'Johnson V': johnson_v,
                'Johnson R': johnson_r, 'Johnson I': johnson_i,
+               'Johnson J': johnson_j,
                '200-300 nm 80%': uv_80, 'ULTRASAT': ultrasat_filter,
-               'SWIR (900-1700 nm 100%': swir_filter}
+               'SWIR (900-1700 nm 100%)': swir_filter}
+
+tess_obs = Observatory(sensor=tesscam, telescope=tess_tele, exposure_time=60, num_exposures=1, filter_bandpass=no_filter)
+uv_obs = Observatory(sensor=imx487, telescope=mono_tele_v3, exposure_time=900, num_exposures=1, filter_bandpass=ultrasat_filter)
+vis_obs = Observatory(sensor=imx455, telescope=mono_tele_v10, exposure_time=60, num_exposures=1, filter_bandpass=johnson_v)
+nir_obs = Observatory(sensor=imx990, telescope=mono_tele_v10, exposure_time=60, num_exposures=1, filter_bandpass=swir_filter)

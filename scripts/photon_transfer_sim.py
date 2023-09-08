@@ -54,6 +54,8 @@ if __name__ == '__main__':
     swir_obs_low_gain = Observatory(telescope=mono_tele_v10,
                                     sensor=imx990_low_gain,
                                     filter_bandpass=johnson_i)
-    spectrum = S.FlatSpectrum(fluxdensity=0.001, fluxunits='Jy')
-    obs_dict = {'VIS': vis_obs, 'SWIR': swir_obs, 'SWIR Low Gain': swir_obs_low_gain}
-    plot_phot_transfer(obs_dict, spectrum)
+    print(vis_obs.pix_scale)
+    print(swir_obs.pix_scale)
+    # spectrum = S.FlatSpectrum(fluxdensity=0.001, fluxunits='Jy')
+    # obs_dict = {'VIS': vis_obs, 'SWIR': swir_obs, 'SWIR Low Gain': swir_obs_low_gain}
+    # plot_phot_transfer(obs_dict, spectrum)

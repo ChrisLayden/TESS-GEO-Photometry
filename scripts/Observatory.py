@@ -285,7 +285,6 @@ class Observatory(object):
         noise = np.sqrt(dark_current_noise ** 2 + bkg_noise ** 2 +
                         self.sensor.read_noise ** 2
                         )
-
         return noise
 
     def single_pix_snr(self, spectrum):
@@ -501,7 +500,7 @@ class Observatory(object):
         signal = frame_signal * self.num_exposures
         noise = np.sqrt(signal +
                         self.num_exposures * n_aper * noise_per_pix ** 2)
-        return (signal, noise, obs_grid)
+        return (signal, noise, obs_grid, optimal_ap)
 
     def snr(self, spectrum, pos=np.array([0, 0])):
         '''The snr of a given spectrum, using the optimal aperture.
@@ -520,7 +519,7 @@ class Observatory(object):
         snr: float
             The signal to noise ratio for the spectrum.
         '''
-        (signal, noise, obs_grid) = self.observation(spectrum, pos)
+        (signal, noise) = self.observation(spectrum, pos)[0:2]
         snr = signal / noise
         return snr
 

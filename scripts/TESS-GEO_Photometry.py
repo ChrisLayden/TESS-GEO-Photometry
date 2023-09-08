@@ -3,6 +3,7 @@
 import os
 import tkinter as tk
 import pysynphot as S
+import numpy as np
 from spectra import *
 from observatory import Sensor, Telescope, Observatory, blackbody_spec
 from instruments import sensor_dict, telescope_dict, filter_dict
@@ -128,96 +129,120 @@ class MyGUI:
                                          *self.filter_options)
         self.filter_menu.grid(row=15, column=1, padx=padx, pady=pady)
 
-        self.lim_mag_button = tk.Button(self.root,
-                                        text='Calculate limiting magnitude',
-                                        command=self.limiting_mag)
-        self.lim_mag_button.grid(row=16, column=0, columnspan=2, padx=padx,
-                                 pady=pady)
-
-        self.lim_mag_button = tk.Button(self.root,
-                                        text='Calculate saturating magnitude',
-                                        command=self.saturating_mag)
-        self.lim_mag_button.grid(row=18, column=0, columnspan=2, padx=padx,
-                                 pady=pady)
-
         # Set a spectrum to observe
         self.spectrum_header = tk.Label(self.root, text='Spectrum to Observe',
                                         font=['Arial', 16, 'bold'])
-        self.spectrum_header.grid(row=0, column=4, columnspan=2, padx=padx,
+        self.spectrum_header.grid(row=16, column=0, columnspan=2, padx=padx,
                                   pady=pady)
 
-        self.flat_spec_bool = tk.BooleanVar()
+        self.flat_spec_bool = tk.BooleanVar(value=True)
         self.flat_spec_check = tk.Checkbutton(self.root,
                                               text='Flat spectrum at AB mag',
                                               variable=self.flat_spec_bool)
-        self.flat_spec_check.grid(row=1, column=4, padx=padx, pady=pady)
-        self.flat_spec_mag = tk.DoubleVar()
+        self.flat_spec_check.grid(row=17, column=0, padx=padx, pady=pady)
+        self.flat_spec_mag = tk.DoubleVar(value=20.0)
         self.flat_spec_entry = tk.Entry(self.root, width=10,
                                         textvariable=self.flat_spec_mag)
-        self.flat_spec_entry.grid(row=1, column=5, padx=padx, pady=pady)
+        self.flat_spec_entry.grid(row=17, column=1, padx=padx, pady=pady)
 
         self.bb_spec_bool = tk.BooleanVar()
         self.bb_spec_check = tk.Checkbutton(self.root,
                                             text='Blackbody with Temp (in K)',
                                             variable=self.bb_spec_bool)
-        self.bb_spec_check.grid(row=2, column=4, padx=padx, pady=pady)
+        self.bb_spec_check.grid(row=18, column=0, padx=padx, pady=pady)
         self.bb_temp = tk.DoubleVar()
         self.bb_spec_entry_1 = tk.Entry(self.root, width=10,
                                         textvariable=self.bb_temp)
-        self.bb_spec_entry_1.grid(row=2, column=5, padx=padx, pady=pady)
+        self.bb_spec_entry_1.grid(row=18, column=1, padx=padx, pady=pady)
         self.bb_dist_label = tk.Label(self.root, text='distance (in Mpc)')
-        self.bb_dist_label.grid(row=3, column=4, padx=padx, pady=pady)
+        self.bb_dist_label.grid(row=19, column=0, padx=padx, pady=pady)
         self.bb_distance = tk.DoubleVar()
         self.bb_spec_entry_2 = tk.Entry(self.root, width=10,
                                         textvariable=self.bb_distance)
-        self.bb_spec_entry_2.grid(row=3, column=5, padx=padx, pady=pady)
+        self.bb_spec_entry_2.grid(row=19, column=1, padx=padx, pady=pady)
         self.bb_lbol_label = tk.Label(self.root,
                                       text='bolometric luminosity (in erg/s)')
-        self.bb_lbol_label.grid(row=4, column=4, padx=padx, pady=pady)
+        self.bb_lbol_label.grid(row=20, column=0, padx=padx, pady=pady)
         self.bb_lbol = tk.DoubleVar()
         self.bb_spec_entry_3 = tk.Entry(self.root, width=10,
                                         textvariable=self.bb_lbol)
-        self.bb_spec_entry_3.grid(row=4, column=5, padx=padx, pady=pady)
+        self.bb_spec_entry_3.grid(row=20, column=1, padx=padx, pady=pady)
 
         self.user_spec_bool = tk.BooleanVar()
         self.user_spec_check = tk.Checkbutton(self.root,
                                               text='Spectrum named',
                                               variable=self.user_spec_bool)
-        self.user_spec_check.grid(row=5, column=4, padx=padx, pady=pady)
+        self.user_spec_check.grid(row=21, column=0, padx=padx, pady=pady)
         user_spec_label = tk.Label(self.root,
                                    text='(Spectrum must be in spectra.py)')
-        user_spec_label.grid(row=6, column=5, padx=padx)
+        user_spec_label.grid(row=22, column=1, padx=padx)
         self.user_spec_name = tk.StringVar()
         self.user_spec_entry = tk.Entry(self.root, width=20,
                                         textvariable=self.user_spec_name)
-        self.user_spec_entry.grid(row=5, column=5, padx=padx, pady=pady)
-
-        self.signal_button = tk.Button(self.root, text='Calculate Signal',
-                                       command=self.disp_sig)
-        self.signal_button.grid(row=8, column=4, columnspan=1, padx=padx,
-                                pady=pady)
-
-        self.snr_button = tk.Button(self.root, text='Calculate SNR',
-                                    command=self.disp_snr)
-        self.snr_button.grid(row=9, column=4, columnspan=1, padx=padx,
-                             pady=pady)
-
-        self.phot_prec_button = tk.Button(self.root,
-                                          text='Calculate Phot. Prec.',
-                                          command=self.disp_phot_prec)
-        self.phot_prec_button.grid(row=10, column=4, columnspan=1, padx=padx,
-                                   pady=pady)
+        self.user_spec_entry.grid(row=21, column=1, padx=padx, pady=pady)
 
         # Initializing labels that display results
+        self.results_header = tk.Label(self.root, text='Tabulated Results',
+                                        font=['Arial', 16, 'bold'])
+        self.results_header.grid(row=0, column=4, columnspan=2, padx=padx,
+                                  pady=pady)
+
+        self.run_button = tk.Button(self.root, fg='green',
+                                        text='RUN',
+                                        command=self.run_calcs)
+        self.run_button.grid(row=1, column=4, columnspan=2, padx=padx,
+                                 pady=pady)
+        
+        self.pix_scale_button = tk.Label(self.root, text='Pixel Scale (arcsec/pix)')
+        self.pix_scale_button.grid(row=2, column=4, columnspan=1, padx=padx,
+                                 pady=pady)
+
+        self.lim_mag_button = tk.Label(self.root,
+                                        text='Limiting AB magnitude')
+        self.lim_mag_button.grid(row=3, column=4, columnspan=1, padx=padx,
+                                 pady=pady)
+
+        self.sat_mag_button = tk.Label(self.root,
+                                        text='Saturating AB magnitude')
+        self.sat_mag_button.grid(row=4, column=4, columnspan=1, padx=padx,
+                                 pady=pady)
+
+        self.signal_button = tk.Label(self.root, text='Signal (e-)')
+        self.signal_button.grid(row=5, column=4, columnspan=1, padx=padx,
+                                pady=pady)
+
+        self.snr_button = tk.Label(self.root, text='SNR')
+        self.snr_button.grid(row=6, column=4, columnspan=1, padx=padx,
+                             pady=pady)
+
+        self.phot_prec_button = tk.Label(self.root, fg='black',
+                                          text='Photometric Precision (ppm)')
+        self.phot_prec_button.grid(row=7, column=4, columnspan=1, padx=padx,
+                                   pady=pady)
+
+        self.n_aper_button = tk.Label(self.root, fg='black',
+                                          text='Pixels in Optimal Aperture')
+        self.n_aper_button.grid(row=8, column=4, columnspan=1, padx=padx,
+                                   pady=pady)
+
+        self.pix_scale_label = tk.Label(self.root, fg='red')
+        self.pix_scale_label.grid(row=2, column=5, columnspan=2, padx=10,
+                                  pady=5)
+        self.lim_mag_label = tk.Label(self.root, fg='red')
+        self.lim_mag_label.grid(row=3, column=5, columnspan=2, padx=10,
+                                pady=5)
         self.sat_mag_label = tk.Label(self.root, fg='red')
-        self.sat_mag_label.grid(row=19, column=0, columnspan=2, padx=10,
+        self.sat_mag_label.grid(row=4, column=5, columnspan=2, padx=10,
                                 pady=5)
         self.sig_label = tk.Label(self.root, fg='red')
-        self.sig_label.grid(row=8, column=5, columnspan=1, padx=10, pady=5)
+        self.sig_label.grid(row=5, column=5, columnspan=1, padx=10, pady=5)
         self.snr_label = tk.Label(self.root, fg='red')
-        self.snr_label.grid(row=9, column=5, columnspan=1, padx=10, pady=5)
+        self.snr_label.grid(row=6, column=5, columnspan=1, padx=10, pady=5)
         self.phot_prec_label = tk.Label(self.root, fg='red')
-        self.phot_prec_label.grid(row=10, column=5, columnspan=1,
+        self.phot_prec_label.grid(row=7, column=5, columnspan=1,
+                                  padx=10, pady=5)
+        self.n_aper_label = tk.Label(self.root, fg='red')
+        self.n_aper_label.grid(row=8, column=5, columnspan=1,
                                   padx=10, pady=5)
 
         self.root.mainloop()
@@ -267,40 +292,6 @@ class MyGUI:
                                   eclip_lat=eclip_angle)
         return observatory
 
-    def limiting_mag(self):
-        observatory = self.set_obs()
-        flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
-        flat_spec.convert('fnu')
-        # Remove old label, if it exists.
-        try:
-            self.lim_mag_label.destroy()
-        except AttributeError:
-            pass
-        try:
-            limiting_mag = observatory.limiting_mag()
-            self.lim_mag_label = tk.Label(self.root,
-                                          text='Limiting Magnitude: ' +
-                                          format(limiting_mag, '4.3f'),
-                                          fg='red', bg='white')
-            self.lim_mag_label.grid(row=17, column=0, columnspan=2,
-                                    padx=10, pady=5)
-            return limiting_mag
-        except AttributeError:
-            print('ERROR: At least one of QE, telescope bandpass, \
-                  or filter bandpass must be array-like.')
-
-    def saturating_mag(self):
-        observatory = self.set_obs()
-        flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
-        flat_spec.convert('fnu')
-        try:
-            saturating_mag = observatory.saturating_mag()
-            self.sat_mag_label.config(text='Saturating Magnitude: ' +
-                                      format(saturating_mag, '4.3f'))
-        except AttributeError:
-            print('ERROR: At least one of QE, telescope bandpass, \
-                   or filter bandpass must be array-like.')
-
     def set_spectrum(self):
         if self.flat_spec_bool.get():
             spectrum = S.FlatSpectrum(fluxdensity=self.flat_spec_mag.get(),
@@ -318,31 +309,24 @@ class MyGUI:
             raise 'No spectrum specified'
         return spectrum
 
-    def calc_signal(self):
+
+    def run_calcs(self):
         spectrum = self.set_spectrum()
         observatory = self.set_obs()
-        signal = observatory.observation(spectrum)[0]
-        return int(round(signal))
-
-    def calc_snr(self):
-        spectrum = self.set_spectrum()
-        observatory = self.set_obs()
-        snr = observatory.snr(spectrum)
-        return snr
-
-    def disp_sig(self):
-        tot_sig = self.calc_signal()
-        self.sig_label.config(text='Signal: ' + format(tot_sig, '4d'))
-
-    def disp_snr(self):
-        snr = self.calc_snr()
-        self.snr_label.config(text='Observed SNR: ' + format(snr, '4.3f'))
-
-    def disp_phot_prec(self):
-        snr = self.calc_snr()
+        (signal, noise, obs_grid, aper) = observatory.observation(spectrum)
+        signal = round(signal)
+        snr = signal / noise
         phot_prec = 10 ** 6 / snr
-        self.phot_prec_label.config(text='Photometric Precision: ' +
-                                    format(phot_prec, '4.3f') + ' ppm')
+        n_aper = int(np.sum(aper))
+        limiting_mag = observatory.limiting_mag()
+        saturating_mag = observatory.saturating_mag()
 
+        self.pix_scale_label.config(text=format(observatory.pix_scale, '4.3f'))
+        self.lim_mag_label.config(text=format(limiting_mag, '4.3f'))
+        self.sat_mag_label.config(text=format(saturating_mag, '4.3f'))
+        self.sig_label.config(text=format(signal, '4d'))
+        self.snr_label.config(text=format(snr, '4.3f'))
+        self.phot_prec_label.config(text=format(phot_prec, '4.3f'))
+        self.n_aper_label.config(text=format(n_aper, '2d'))
 
 MyGUI()
