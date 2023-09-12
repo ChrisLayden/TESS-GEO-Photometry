@@ -197,52 +197,66 @@ class MyGUI:
         self.pix_scale_button.grid(row=2, column=4, columnspan=1, padx=padx,
                                  pady=pady)
 
+        self.lambda_pivot_button = tk.Label(self.root, text='Pivot Wavelength (nm)')
+        self.lambda_pivot_button.grid(row=3, column=4, columnspan=1, padx=padx,
+                                 pady=pady)
+
+        self.psf_fwhm_button = tk.Label(self.root, text='PSF FWHM (um)')
+        self.psf_fwhm_button.grid(row=4, column=4, columnspan=1, padx=padx,
+                                 pady=pady)
+
         self.lim_mag_button = tk.Label(self.root,
                                         text='Limiting AB magnitude')
-        self.lim_mag_button.grid(row=3, column=4, columnspan=1, padx=padx,
+        self.lim_mag_button.grid(row=5, column=4, columnspan=1, padx=padx,
                                  pady=pady)
 
         self.sat_mag_button = tk.Label(self.root,
                                         text='Saturating AB magnitude')
-        self.sat_mag_button.grid(row=4, column=4, columnspan=1, padx=padx,
+        self.sat_mag_button.grid(row=6, column=4, columnspan=1, padx=padx,
                                  pady=pady)
 
         self.signal_button = tk.Label(self.root, text='Signal (e-)')
-        self.signal_button.grid(row=5, column=4, columnspan=1, padx=padx,
+        self.signal_button.grid(row=8, column=4, columnspan=1, padx=padx,
                                 pady=pady)
 
         self.snr_button = tk.Label(self.root, text='SNR')
-        self.snr_button.grid(row=6, column=4, columnspan=1, padx=padx,
+        self.snr_button.grid(row=9, column=4, columnspan=1, padx=padx,
                              pady=pady)
 
         self.phot_prec_button = tk.Label(self.root, fg='black',
                                           text='Photometric Precision (ppm)')
-        self.phot_prec_button.grid(row=7, column=4, columnspan=1, padx=padx,
+        self.phot_prec_button.grid(row=10, column=4, columnspan=1, padx=padx,
                                    pady=pady)
 
         self.n_aper_button = tk.Label(self.root, fg='black',
                                           text='Pixels in Optimal Aperture')
-        self.n_aper_button.grid(row=8, column=4, columnspan=1, padx=padx,
+        self.n_aper_button.grid(row=11, column=4, columnspan=1, padx=padx,
                                    pady=pady)
 
         self.pix_scale_label = tk.Label(self.root, fg='red')
         self.pix_scale_label.grid(row=2, column=5, columnspan=2, padx=10,
                                   pady=5)
+        self.lambda_pivot_label = tk.Label(self.root, fg='red')
+        self.lambda_pivot_label.grid(row=3, column=5, columnspan=2, padx=10,
+                                  pady=5)
+        self.psf_fwhm_label = tk.Label(self.root, fg='red')
+        self.psf_fwhm_label.grid(row=4, column=5, columnspan=2, padx=10,
+                                  pady=5)
         self.lim_mag_label = tk.Label(self.root, fg='red')
-        self.lim_mag_label.grid(row=3, column=5, columnspan=2, padx=10,
+        self.lim_mag_label.grid(row=5, column=5, columnspan=2, padx=10,
                                 pady=5)
         self.sat_mag_label = tk.Label(self.root, fg='red')
-        self.sat_mag_label.grid(row=4, column=5, columnspan=2, padx=10,
+        self.sat_mag_label.grid(row=6, column=5, columnspan=2, padx=10,
                                 pady=5)
         self.sig_label = tk.Label(self.root, fg='red')
-        self.sig_label.grid(row=5, column=5, columnspan=1, padx=10, pady=5)
+        self.sig_label.grid(row=8, column=5, columnspan=1, padx=10, pady=5)
         self.snr_label = tk.Label(self.root, fg='red')
-        self.snr_label.grid(row=6, column=5, columnspan=1, padx=10, pady=5)
+        self.snr_label.grid(row=9, column=5, columnspan=1, padx=10, pady=5)
         self.phot_prec_label = tk.Label(self.root, fg='red')
-        self.phot_prec_label.grid(row=7, column=5, columnspan=1,
+        self.phot_prec_label.grid(row=10, column=5, columnspan=1,
                                   padx=10, pady=5)
         self.n_aper_label = tk.Label(self.root, fg='red')
-        self.n_aper_label.grid(row=8, column=5, columnspan=1,
+        self.n_aper_label.grid(row=11, column=5, columnspan=1,
                                   padx=10, pady=5)
 
         self.root.mainloop()
@@ -262,6 +276,10 @@ class MyGUI:
         if self.tele_default.get() == 'Mono Tele V11 (UV)':
             # ~2 times the diffraction limit for f/3.5
             self.psf_sigma = 0.76
+        elif self.tele_default.get() == 'TESS Telescope (IR)':
+            self.psf_sigma = 11
+        else:
+            self.psf_sigma = None
         self.tele_vars[0].set(self.tele.diam)
         self.tele_vars[1].set(self.tele.f_num)
         self.tele_vars[2].set(self.tele.bandpass)
@@ -322,6 +340,8 @@ class MyGUI:
         saturating_mag = observatory.saturating_mag()
 
         self.pix_scale_label.config(text=format(observatory.pix_scale, '4.3f'))
+        self.lambda_pivot_label.config(text=format(observatory.lambda_pivot() / 10, '4.1f'))
+        self.psf_fwhm_label.config(text=format(observatory.psf_fwhm(), '4.3f'))
         self.lim_mag_label.config(text=format(limiting_mag, '4.3f'))
         self.sat_mag_label.config(text=format(saturating_mag, '4.3f'))
         self.sig_label.config(text=format(signal, '4d'))

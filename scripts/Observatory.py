@@ -243,13 +243,17 @@ class Observatory(object):
         bkg_signal = self.tot_signal(bkg_sp)
         return bkg_signal
 
-    def lambda_pivot(self, spectrum):
-        '''The pivot wavelength for observation of a given spectrum.'''
-        obs_binset = self.binset(spectrum)
-        S.setref(area=np.pi * self.telescope.diam ** 2/4)
-        obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
-                            force='extrap')
-        return obs.pivot()
+    def lambda_pivot(self):
+        '''The pivot wavelength for observation of a given spectrum, in Ang.'''
+        return self.bandpass.pivot()
+    
+    def psf_fwhm(self):
+        '''The full width at half maximum of the PSF, in microns.'''
+        if self.psf_sigma is None:
+            fwhm = 1.025 * self.lambda_pivot() * self.telescope.f_num / 10 ** 4
+        else:
+            fwhm = 2.355 * self.psf_sigma
+        return fwhm
 
     def single_pix_signal(self, spectrum):
         '''The signal within the central pixel of an image.
@@ -260,7 +264,7 @@ class Observatory(object):
             The spectrum for which to calculate the signal.
         '''
 
-        pivot_wave = self.lambda_pivot(spectrum)
+        pivot_wave = self.lambda_pivot()
         if self.psf_sigma is not None:
             half_width = self.sensor.pix_size / 2
             pix_frac = psfs.gaussian_ensq_energy(half_width, self.psf_sigma,
@@ -445,7 +449,7 @@ class Observatory(object):
             psf_grid = psfs.airy_disk(subarray_size, resolution,
                                       self.sensor.pix_size, pos,
                                       self.telescope.f_num,
-                                      self.lambda_pivot(spectrum))
+                                      self.lambda_pivot())
         intensity_grid = psf_grid * tot_signal
         return intensity_grid
 
@@ -555,7 +559,6 @@ def blackbody_spec(temp, dist, l_bol):
     obs_spectrum = S.ArraySpectrum(obs_wave, obs_flux,
                                    fluxunits=spectrum.fluxunits)
     return obs_spectrum
-
 
 # Some tests of Observatory behavior, using a spectrum similar to the sun.
 if __name__ == '__main__':

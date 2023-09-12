@@ -76,7 +76,6 @@ johnson_v = S.ObsBandpass('johnson,v')
 johnson_r = S.ObsBandpass('johnson,r')
 johnson_i = S.ObsBandpass('johnson,i')
 johnson_j = S.ObsBandpass('johnson,j')
-uv_80 = S.FileBandpass(data_folder + 'uv_200_300.fits')
 # Array with uniform total transmission 9000-17000 ang
 swir_wave = np.arange(9000, 17000, 100)
 swir_thru = np.ones(len(swir_wave))
@@ -95,7 +94,7 @@ filter_dict = {'None': no_filter, 'Johnson U': johnson_u,
                'Johnson B': johnson_b, 'Johnson V': johnson_v,
                'Johnson R': johnson_r, 'Johnson I': johnson_i,
                'Johnson J': johnson_j,
-               '200-300 nm 80%': uv_80, 'ULTRASAT': ultrasat_filter,
+               'ULTRASAT': ultrasat_filter,
                'SWIR (900-1700 nm 100%)': swir_filter}
 
 tess_obs = Observatory(sensor=tesscam, telescope=tess_tele, exposure_time=60, num_exposures=1, filter_bandpass=no_filter)
