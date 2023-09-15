@@ -16,8 +16,9 @@ imx455_qe = S.FileBandpass(data_folder + 'imx455.fits')
 imx455 = Sensor(pix_size=3.76, read_noise=1.65, dark_current=1.5*10**-3,
                 full_well=51000, qe=imx455_qe)
 
+
 imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
-imx487 = Sensor(pix_size=2.74, read_noise=3, dark_current=5**-4,
+imx487 = Sensor(pix_size=2.74, read_noise=2.51, dark_current=5**-4,
                 full_well=100000, qe=imx487_qe)
 
 ultrasat_arr = np.genfromtxt(data_folder + 'ULTRASAT_QE.csv', delimiter=',')
@@ -49,24 +50,28 @@ sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
 v10_bandpass = S.UniformTransmission(0.693)
 mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
 
-v11_bandpass = S.UniformTransmission(0.54)
-mono_tele_v11 = Telescope(diam=28.3, f_num=3.5, bandpass=v11_bandpass)
+# V10 UVS telescope with visible coatings
+mono_tele_v10_vis = Telescope(diam=25, f_num=4.8, bandpass=S.UniformTransmission(0.758))
+# V10 UVS telescope with UV coatings
+mono_tele_v10_uv = Telescope(diam=25, f_num=4.8, bandpass=S.UniformTransmission(0.638))
 
-v3_bandpass = S.UniformTransmission(0.54)
-mono_tele_v3 = Telescope(diam=8.5, f_num=3.5, bandpass=v3_bandpass)
+mono_tele_v20_vis = Telescope(diam=47, f_num=4.8, bandpass=S.UniformTransmission(0.758))
 
-v3_bandpass = S.UniformTransmission(0.54)
-mono_tele_v10uv = Telescope(diam=25, f_num=4.8, bandpass=v3_bandpass)
+v3uv_bandpass = S.UniformTransmission(0.54)
+v3swir_bandpass = S.UniformTransmission(0.54*0.95/0.8)
+mono_tele_v3uv = Telescope(diam=8.5, f_num=3.6, bandpass=v3uv_bandpass)
+mono_tele_v3swir = Telescope(diam=8.5, f_num=3.6, bandpass=v3swir_bandpass)
 
 # Transmission is scaled to give 15,000 e-/s from a mag 10 star
 tess_tele_thru = S.UniformTransmission(0.6315)
 tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
 
-telescope_dict = {'Mono Tele V10 (Visible)': mono_tele_v10,
-                  'Mono Tele V10 (UV)': mono_tele_v10uv,
-                  'Mono Tele V11 (UV)': mono_tele_v11,
-                  'Mono Tele V3 (UV)': mono_tele_v3,
-                  'TESS Telescope (IR)': tess_tele}
+telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_vis,
+                  'Mono Tele V10UVS (Visible Coatings)': mono_tele_v10_vis,
+                  'Mono Tele V20UVS (Visible Coatings)': mono_tele_v20_vis,
+                  'Mono Tele V3UV': mono_tele_v3uv,
+                  'Mono Tele V3SWIR': mono_tele_v3swir,
+                  'TESS Telescope': tess_tele}
 
 # Defining filters
 no_filter = S.UniformTransmission(1)
@@ -96,8 +101,3 @@ filter_dict = {'None': no_filter, 'Johnson U': johnson_u,
                'Johnson J': johnson_j,
                'ULTRASAT': ultrasat_filter,
                'SWIR (900-1700 nm 100%)': swir_filter}
-
-tess_obs = Observatory(sensor=tesscam, telescope=tess_tele, exposure_time=60, num_exposures=1, filter_bandpass=no_filter)
-uv_obs = Observatory(sensor=imx487, telescope=mono_tele_v3, exposure_time=900, num_exposures=1, filter_bandpass=ultrasat_filter)
-vis_obs = Observatory(sensor=imx455, telescope=mono_tele_v10, exposure_time=60, num_exposures=1, filter_bandpass=johnson_v)
-nir_obs = Observatory(sensor=imx990, telescope=mono_tele_v10, exposure_time=60, num_exposures=1, filter_bandpass=swir_filter)

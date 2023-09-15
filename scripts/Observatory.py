@@ -16,6 +16,7 @@ blackbody_spec
 '''
 
 import os
+import matplotlib.pyplot as plt
 import numpy as np
 import pysynphot as S
 import psfs
@@ -239,7 +240,13 @@ class Observatory(object):
         '''The background noise per pixel, in e-/pix.'''
         bkg_wave, bkg_ilam = bkg_spectrum(self.eclip_lat)
         bkg_flam = bkg_ilam * self.pix_scale ** 2
+        # plt.plot(bkg_wave / 10, bkg_ilam * 10)
+        # plt.xlabel('Wavelength (nm)')
+        # plt.ylabel('Intensity (W/m^2/micron/arcsec^2)')
+        # plt.show()
         bkg_sp = S.ArraySpectrum(bkg_wave, bkg_flam, fluxunits='flam')
+        # # What Frank's been using
+        # bkg_sp = S.FlatSpectrum(0.3 * 10 ** -18 * self.pix_scale ** 2, fluxunits='flam')
         bkg_signal = self.tot_signal(bkg_sp)
         return bkg_signal
 
@@ -255,15 +262,15 @@ class Observatory(object):
             fwhm = 2.355 * self.psf_sigma
         return fwhm
 
-    def single_pix_signal(self, spectrum):
-        '''The signal within the central pixel of an image.
+    def eff_area(self):
+        '''The effective photometric area of the observatory, in cm^2.'''
+        tele_area = np.pi * self.telescope.diam ** 2 / 4
+        avg_throughput = self.bandpass.throughput.mean()
+        eff_area = tele_area * avg_throughput
+        return eff_area
 
-        Parameters
-        ----------
-        spectrum: pysynphot.spectrum object
-            The spectrum for which to calculate the signal.
-        '''
-
+    def central_pix_frac(self):
+        '''The fraction of the total signal in the central pixel.'''
         pivot_wave = self.lambda_pivot()
         if self.psf_sigma is not None:
             half_width = self.sensor.pix_size / 2
@@ -273,7 +280,17 @@ class Observatory(object):
             half_width = (np.pi * self.sensor.pix_size /
                           (2 * self.telescope.f_num * pivot_wave * 10**-4))
             pix_frac = psfs.airy_ensq_energy(half_width)
+        return pix_frac
 
+    def single_pix_signal(self, spectrum):
+        '''The signal within the central pixel of an image.
+
+        Parameters
+        ----------
+        spectrum: pysynphot.spectrum object
+            The spectrum for which to calculate the signal.
+        '''
+        pix_frac = self.central_pix_frac()
         signal = self.tot_signal(spectrum) * pix_frac
         return signal
 
@@ -404,7 +421,10 @@ class Observatory(object):
         def saturation_diff(mag):
             '''Difference between the pixel signal and full well capacity.'''
             signal = mag_10_signal * 10 ** ((10 - mag) / 2.5)
-            return signal - self.sensor.full_well
+            bkg_signal = self.bkg_per_pix()
+            dark_noise = self.sensor.dark_current * self.exposure_time
+            # print(signal, bkg_signal, dark_noise)
+            return signal + bkg_signal + dark_noise - self.sensor.full_well
 
         # Newton-Raphson method for root-finding
         mag_tol, sig_tol = 0.01, 10
@@ -506,6 +526,22 @@ class Observatory(object):
                         self.num_exposures * n_aper * noise_per_pix ** 2)
         return (signal, noise, obs_grid, optimal_ap)
 
+    def noise_breakdown(self, spectrum):
+        '''Return a string telling the breakdown of noise sources in an image.'''
+        (signal, noise, obs_grid, optimal_ap) = self.observation(spectrum)
+        shot_noise = np.sqrt(signal)
+        n_aper = optimal_ap.sum()
+        # single-pixel noise sources
+        pix_dark_noise = np.sqrt(self.sensor.dark_current *
+                                     self.exposure_time)
+        pix_bkg_noise = np.sqrt(self.bkg_per_pix())
+        pix_read_noise = self.sensor.read_noise
+        # total noise in the optimal aperture
+        dark_noise = np.sqrt(self.num_exposures * n_aper) * pix_dark_noise
+        bkg_noise = np.sqrt(self.num_exposures * n_aper) * pix_bkg_noise
+        read_noise = np.sqrt(self.num_exposures * n_aper * pix_read_noise ** 2)
+        return('Shot noise: {:.2f}\nDark noise: {:.2f}\nBackground noise: {:.2f}\nRead noise: {:.2f}'.format(shot_noise, dark_noise, bkg_noise, read_noise))
+
     def snr(self, spectrum, pos=np.array([0, 0])):
         '''The snr of a given spectrum, using the optimal aperture.
 
@@ -588,4 +624,4 @@ if __name__ == '__main__':
     #                          filter_bandpass=b_bandpass, eclip_lat=90,
     #                          exposure_time=300, num_exposures=3)
 
-    print(tess_geo_obs.limiting_mag())
+    print(tess_geo_obs.eff_area())
