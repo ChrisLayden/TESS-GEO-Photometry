@@ -245,17 +245,7 @@ class FakeLC(object):
         f = np.r_[f,np.conj(f[-1:0:-1])]
         #set the mean to 0
         f[0] = 0.0
-
-        # sigma = np.sqrt(simpson(p, feval))
-        # print(sigma)
-        
-        # y = fft.ifft(p).real
-        # print(y)
-
-        # plt.plot(feval, p)
-        # plt.xscale('log')
-        # plt.yscale('log')
-        # plt.show()
+        # print(f)
 
         y = fft.ifft(f*(2*npoints - 1))
         # take out the scaling
@@ -265,12 +255,17 @@ class FakeLC(object):
 
         return interp(t)
 
-my_lc = FakeLC(2, 0.001, 1000)
-x = np.r_[0:10000:10000j]
-y = my_lc(x)
-print(np.std(y))
-plt.plot(x,y,'k.-')
-plt.show()
+# my_lc = FakeLC(2, 0.01, 100)
+# x = np.r_[0:100:100000j]
+# y = my_lc(x)
+# plt.plot(x,y,'k.-')
+# plt.show()
+
+# yf = np.absolute(np.fft.fft(y)) ** 2
+# plt.plot(yf)
+# plt.yscale('log')
+# plt.xscale('log')
+# plt.show()
 
 
 class RandomField(object):

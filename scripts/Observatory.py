@@ -16,13 +16,12 @@ blackbody_spec
 '''
 
 import os
-import matplotlib.pyplot as plt
 import numpy as np
 import pysynphot as S
 import psfs
-import constants
-from redshift_lookup import RedshiftLookup
+import warnings
 from sky_background import bkg_spectrum
+from jitter_tools import jittered_array
 
 
 class Sensor(object):
@@ -86,7 +85,7 @@ class Telescope(object):
     plate_scale: float
         The focal plate scale, in um/arcsec
     '''
-    def __init__(self, diam, f_num, bandpass=1):
+    def __init__(self, diam, f_num, bandpass=S.UniformTransmission(1)):
         '''Initializing a telescope object.
 
         Parameters
@@ -110,81 +109,36 @@ class Telescope(object):
 
 
 class Observatory(object):
-    '''Class specifying a complete observatory.
-
-    Attributes
-    ----------
-    sensor: Sensor object
-        The sensor used in the observatory.
-    telescope: Telescope object
-        The telescope used in the observatory.
-    bandpass: pysynphot.bandpass object
-        The bandpass of the observatory as a whole.
-        This is the product of the sensor, telescope, and
-        filter bandpasses.
-    exposure_time: float
-        Duration for one exposure, in seconds.
-    num_exposures: int (default 1)
-        Number of exposures in a stacked image.
-    limiting_s_n: float
-        The minimum signal to noise ratio for a detection.
-    psf_sigma: float
-        The standard deviation of the point spread function
-        of the system, in um, assuming the PSF is Gaussian.
-        If None is passed, class methods will assume the
-        system is diffraction-limited with an Airy disk PSF
-        and set psf_sigma to the diffraction limit
-        (1.22*lambda*fnum).
-    pix_scale: float
-        The pixel scale of the observatory, in arcsec/pix.
-    obs: pysynphot.observation object
-        The Observation object combining all of the
-        observatory's specifications.
-
-    Methods
-    ----------
-    tot_signal(spectrum=None):
-        Returns the signal for one exopsure of a source, in
-        total number of electrons produced across the sensor.
-    s_n(spectrum=None):
-        Returns the S/N ratio for one stacked image.
-    limiting_dist(spectrum=None):
-        Returns the maximum distance, in pc, at which
-        a given object can be detected. Accounts for
-        dimming and redshift.
-    limiting_mag():
-        Returns the maximum AB magnitude that the
-        observatory can detect in one stacked image.
-    '''
+    '''Class specifying a complete observatory.'''
 
     def __init__(
             self, sensor, telescope, filter_bandpass=1,
             exposure_time=1., num_exposures=1, eclip_lat=90,
-            limiting_s_n=5., psf_sigma=None):
+            limiting_s_n=5., psf_sigma=None, jitter=0):
+
         '''Initialize Observatory class attributes.
 
         Parameters
         ----------
         sensor: Sensor object
-            The sensor used in the observatory.
+            The photon-counting sensor used for the observations.
         telescope: Telescope object
-            The telescope used in the observatory.
-        filter_bandpass: pysynphot.bandpass object (default 1)
-            The bandpass of the filter used. If not specified,
-            assumes no filter is used.
-        exposure_time: float (default 1.0)
-            Duration for one exposure, in seconds.
-        num_exposures: int (default 1)
-            Number of exposures in a stacked image.
-        limiting_s_n: float (default 5.0)
-            The minimum signal to noise ratio for a detection.
-        psf_sigma: float (default None)
-            The standard deviation of the point spread function
-            of the system, in um, assuming the PSF is Gaussian.
-            If None is passed, assume the system is diffraction-
-            limited with an Airy disk PSF and set psf_sigma to
-            be the diffraction limit (1.22*lambda*fnum) within
-            class methods.
+            The telescope used for the observations.
+        filter_bandpass: pysynphot.bandpass object
+            The filter bandpass as a function of wavelength.
+        exposure_time: float
+            The duration of each exposure, in seconds.
+        num_exposures: int
+            The number of exposures to stack into one image.
+        eclip_lat: float
+            The ecliptic latitude of the target, in degrees.
+        limiting_s_n: float
+            The signal-to-noise ratio constituting a detection.
+        psf_sigma: float
+            The standard deviation of the PSF, in microns.
+        jitter: float
+            The 1-sigma jitter of the telescope, in arcseconds.
+            Assumes Gaussian white noise.
         '''
 
         self.sensor = sensor
@@ -192,16 +146,27 @@ class Observatory(object):
         self.filter_bandpass = filter_bandpass
         self.bandpass = (filter_bandpass * self.telescope.bandpass *
                          self.sensor.qe)
+        # Avoid error when all throughputs are flat
+        all_flat_q = (np.all((self.filter_bandpass.wave is None)) and
+                      np.all((self.sensor.qe.wave is None)) and
+                      np.all(self.telescope.bandpass.wave is None))
+        if all_flat_q:
+            warnings.warn('All bandpasses are flat. Setting pivot ' +
+                          'wavelength based on PYSYNPHOT wavelength ' +
+                          'limits (50-2600 nm).')
+            wavelengths = S.FlatSpectrum(1, fluxunits='flam').wave
+            array_bp = S.ArrayBandpass(wavelengths, np.ones(len(wavelengths)))
+            self.bandpass = self.bandpass * array_bp
+        self.lambda_pivot = self.bandpass.pivot()
+        self.psf_sigma = psf_sigma
+
         self.exposure_time = exposure_time
         self.num_exposures = num_exposures
         self.eclip_lat = eclip_lat
         self.limiting_s_n = limiting_s_n
-        self.psf_sigma = psf_sigma
-
         plate_scale = 206265 / (self.telescope.focal_length * 10**4)
         self.pix_scale = plate_scale * self.sensor.pix_size
-        self.dark_noise = self.sensor.dark_current * self.exposure_time
-        self.bkg_noise = self.bkg_per_pix()
+        self.jitter = jitter
 
     def binset(self, spectrum):
         '''Narrowest binset from telescope, sensor, filter, and spectrum.'''
@@ -210,15 +175,7 @@ class Observatory(object):
         binset_list = [x for x in binset_list if x is not None]
         range_list = [np.ptp(x) for x in binset_list]
         obs_binset = binset_list[np.argmin(range_list)]
-        # Avoid bug when all throughputs are flat
-        all_flat_q = (np.all((self.filter_bandpass.wave is None)) and
-                      np.all((self.sensor.qe.wave is None)) and
-                      np.all(self.telescope.bandpass.wave is None))
-        if all_flat_q:
-            array_bp = S.ArrayBandpass(obs_binset, np.ones(len(obs_binset)))
-            self.bandpass = self.bandpass * array_bp
         return obs_binset
-        # return spectrum.wave
 
     def tot_signal(self, spectrum):
         '''The total number of electrons generated in one exposure.
@@ -228,7 +185,7 @@ class Observatory(object):
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the signal.
         '''
-        S.setref(area=np.pi * self.telescope.diam ** 2/4)
+        S.setref(area=np.pi * self.telescope.diam ** 2 / 4)
         obs_binset = self.binset(spectrum)
         obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
                             force='extrap')
@@ -240,27 +197,12 @@ class Observatory(object):
         '''The background noise per pixel, in e-/pix.'''
         bkg_wave, bkg_ilam = bkg_spectrum(self.eclip_lat)
         bkg_flam = bkg_ilam * self.pix_scale ** 2
-        # plt.plot(bkg_wave / 10, bkg_ilam * 10)
-        # plt.xlabel('Wavelength (nm)')
-        # plt.ylabel('Intensity (W/m^2/micron/arcsec^2)')
-        # plt.show()
         bkg_sp = S.ArraySpectrum(bkg_wave, bkg_flam, fluxunits='flam')
         # # What Frank's been using
-        # bkg_sp = S.FlatSpectrum(0.3 * 10 ** -18 * self.pix_scale ** 2, fluxunits='flam')
+        # bkg_sp = S.FlatSpectrum(0.3 * 10 ** -18 * self.pix_scale ** 2,
+        #                         fluxunits='flam')
         bkg_signal = self.tot_signal(bkg_sp)
         return bkg_signal
-
-    def lambda_pivot(self):
-        '''The pivot wavelength for observation of a given spectrum, in Ang.'''
-        return self.bandpass.pivot()
-    
-    def psf_fwhm(self):
-        '''The full width at half maximum of the PSF, in microns.'''
-        if self.psf_sigma is None:
-            fwhm = 1.025 * self.lambda_pivot() * self.telescope.f_num / 10 ** 4
-        else:
-            fwhm = 2.355 * self.psf_sigma
-        return fwhm
 
     def eff_area(self):
         '''The effective photometric area of the observatory, in cm^2.'''
@@ -269,16 +211,24 @@ class Observatory(object):
         eff_area = tele_area * avg_throughput
         return eff_area
 
+    def psf_fwhm(self):
+        '''The full width at half maximum of the PSF, in microns.'''
+        if self.psf_sigma is None:
+            fwhm = 1.025 * self.lambda_pivot * self.telescope.f_num / 10 ** 4
+        else:
+            fwhm = 2.355 * self.psf_sigma
+        return fwhm
+
     def central_pix_frac(self):
         '''The fraction of the total signal in the central pixel.'''
-        pivot_wave = self.lambda_pivot()
         if self.psf_sigma is not None:
             half_width = self.sensor.pix_size / 2
             pix_frac = psfs.gaussian_ensq_energy(half_width, self.psf_sigma,
                                                  self.psf_sigma)
         else:
             half_width = (np.pi * self.sensor.pix_size /
-                          (2 * self.telescope.f_num * pivot_wave * 10**-4))
+                          (2 * self.telescope.f_num *
+                           self.lambda_pivot * 10 ** -4))
             pix_frac = psfs.airy_ensq_energy(half_width)
         return pix_frac
 
@@ -322,57 +272,6 @@ class Observatory(object):
         exposure_snr = signal / noise
         stack_snr = exposure_snr * np.sqrt(self.num_exposures)
         return stack_snr
-
-    def limiting_dist(self, spectrum, initial_dist):
-        '''Returns the max distance at which a source can be detected, in Mpc.
-
-        Parameters
-        ----------
-        spectrum: pysynphot.spectrum object
-            The spectrum for which to calculate the max distance.
-        initial_dist: float
-            The luminosity distance at which the spectrum is
-            specified, in Mpc.
-        '''
-
-        ztab = RedshiftLookup()
-        initial_sp = spectrum if spectrum is not None else self.spectrum
-
-        def s_n_diff_dist(obs_dist):
-            '''The difference between S/N at obs_dist and the limiting S/N.'''
-            initial_z = ztab(initial_dist)
-            obs_z = ztab(obs_dist)
-            # Adjust the wavelengths of the source spectrum to account for
-            # the redshift.
-            obs_wave = initial_sp.wave * (1+initial_z) / (1+obs_z)
-            obs_flux = (initial_sp.flux * (1+initial_z) / (1+obs_z)
-                                        * (initial_dist/obs_dist)**2)
-            obs_sp = S.ArraySpectrum(obs_wave, obs_flux,
-                                     fluxunits=initial_sp.fluxunits)
-            return self.single_pix_snr(obs_sp) - self.limiting_s_n
-
-        # Newton-Raphson method for root-finding
-        dist_tol, s_n_tol = 0.001, 0.01
-        # Make an estimate for the limiting distance based on the initial S/N
-        initial_s_n = s_n_diff_dist(initial_dist) + self.limiting_s_n
-        dist_guess = initial_dist * np.sqrt(initial_s_n / self.limiting_s_n)
-        dist = dist_guess
-        dist_deriv_step = 0.01
-        eps_dist = 10
-        eps_s_n = s_n_diff_dist(dist)
-        i = 1
-        while abs(eps_s_n) > s_n_tol:
-            if abs(eps_dist) < dist_tol:
-                raise RuntimeError('No convergence to within 1 kpc.')
-            elif i > 20:
-                raise RuntimeError('No convergence after 20 iterations.')
-            eps_s_n_prime = ((s_n_diff_dist(dist + dist_deriv_step) - eps_s_n)
-                             / dist_deriv_step)
-            eps_dist = eps_s_n / eps_s_n_prime
-            dist -= eps_dist
-            eps_s_n = s_n_diff_dist(dist)
-            i += 1
-        return dist
 
     def limiting_mag(self):
         '''The limiting AB magnitude for the observatory.'''
@@ -423,7 +322,6 @@ class Observatory(object):
             signal = mag_10_signal * 10 ** ((10 - mag) / 2.5)
             bkg_signal = self.bkg_per_pix()
             dark_noise = self.sensor.dark_current * self.exposure_time
-            # print(signal, bkg_signal, dark_noise)
             return signal + bkg_signal + dark_noise - self.sensor.full_well
 
         # Newton-Raphson method for root-finding
@@ -446,9 +344,9 @@ class Observatory(object):
             i += 1
         return mag
 
-    def avg_intensity_grid(self, spectrum, pos=np.array([0, 0]),
-                           subarray_size=11, resolution=11):
-        '''The average intensity across a subarray with sub-pixel resolution
+    def signal_grid_fine(self, spectrum, pos=np.array([0, 0]),
+                         img_size=11, resolution=11):
+        '''The average signal (in electrons) produced across a pixel subarray.
 
         Parameters
         ----------
@@ -458,24 +356,27 @@ class Observatory(object):
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
             central pixel.
+        img_size: int (default 11)
+            The extent of the subarray, in pixels.
+        resolution: int (default 11)
+            The number of sub-pixels per pixel.
         '''
         tot_signal = self.tot_signal(spectrum)
-        # Simulate the PSF on a subarray of pixels, with sub-pixel resolution.
         if self.psf_sigma is not None:
             cov_mat = [[self.psf_sigma ** 2, 0], [0, self.psf_sigma ** 2]]
-            psf_grid = psfs.gaussian_psf(subarray_size, resolution,
+            psf_grid = psfs.gaussian_psf(img_size, resolution,
                                          self.sensor.pix_size, pos, cov_mat)
         else:
-            psf_grid = psfs.airy_disk(subarray_size, resolution,
+            psf_grid = psfs.airy_disk(img_size, resolution,
                                       self.sensor.pix_size, pos,
                                       self.telescope.f_num,
-                                      self.lambda_pivot())
+                                      self.lambda_pivot)
         intensity_grid = psf_grid * tot_signal
         return intensity_grid
 
-    def obs_grid(self, spectrum, pos=np.array([0, 0]),
-                 subarray_size=11, resolution=11):
-        '''The intensity (in electrons) across a 9x9 pixel subarray
+    def signal_grid(self, spectrum, pos=np.array([0, 0]),
+                    img_size=11, resolution=11):
+        '''The signal (in electrons) in each pixel for a small sensor region.
 
         Parameters
         ----------
@@ -485,118 +386,114 @@ class Observatory(object):
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
             central pixel.
+        img_size: int (default 11)
+            The extent of the subarray, in pixels.
+        resolution: int (default 11)
+            The number of sub-pixels per pixel.
         '''
-        base_grid = self.avg_intensity_grid(spectrum, pos, subarray_size,
-                                            resolution)
-        # Sum the signals within each pixel
+        base_grid = self.signal_grid_fine(spectrum, pos, img_size,
+                                          resolution)
         temp_grid = base_grid.reshape((11, resolution, 11, resolution))
         pixel_grid = temp_grid.sum(axis=(1, 3))
         return pixel_grid
 
-    def observation(self, spectrum, pos=np.array([0, 0])):
-        '''The optimal image, signal, and noise observed for a spectrum.
+    def observed_frame(self, spectrum, pos=[0, 0], jitter_time=1,
+                       img_size=11, resolution=11):
+        '''An actual observed frame, with simulated pointing jitter.
 
         Parameters
         ----------
         spectrum: pysynphot.spectrum object
-            The spectrum for which to calculate the image.
+            The spectrum for which to calculate the intensity grid.
         pos: array-like (default [0, 0])
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
             central pixel.
+        img_size: int (default 11)
+            The extent of the subarray, in pixels.
+        resolution: int (default 11)
+            The number of sub-pixels per pixel.
 
         Returns
         -------
-        signal: float
-            The total signal in the optimal aperture, in e-
-        noise: float
-            The total noise in the optimal aperture, in e-
-        image: 2D array
-            The image of the source, in e-/pix
+        image : array-like
+            The observed image.
         '''
-        noise_per_pix = self.single_pix_noise()
-        pixel_grid = self.obs_grid(spectrum, pos)
-        # Determine the optimal aperture for the image
-        optimal_ap = psfs.optimal_aperture(pixel_grid, noise_per_pix)
-        n_aper = optimal_ap.sum()
-        obs_grid = pixel_grid * optimal_ap
-        frame_signal = obs_grid.sum()
-        signal = frame_signal * self.num_exposures
-        noise = np.sqrt(signal +
-                        self.num_exposures * n_aper * noise_per_pix ** 2)
-        return (signal, noise, obs_grid, optimal_ap)
 
-    def noise_breakdown(self, spectrum):
-        '''Return a string telling the breakdown of noise sources in an image.'''
-        (signal, noise, obs_grid, optimal_ap) = self.observation(spectrum)
+        initial_grid = self.signal_grid_fine(spectrum, pos,
+                                             img_size, resolution)
+        # Check that jitter sampling frequency is higher than frame rate
+        if jitter_time >= self.exposure_time:
+            raise ValueError('Jitter sampling frequency must' +
+                             'be higher than frame rate')
+        num_steps = round(self.exposure_time // jitter_time)
+        avg_grid = jittered_array(initial_grid, num_steps, self.jitter)
+        frame = avg_grid.reshape((img_size, resolution, img_size,
+                                  resolution)).sum(axis=(1, 3))
+        return frame
+
+    def observe(self, spectrum, pos=[0, 0], num_images=100,
+                     jitter_time=1, img_size=11, resolution=11):
+        ''' Monte Carlo estimate of the signal and noise for a spectrum.
+
+        Parameters
+        ----------
+        spectrum: pysynphot.spectrum object
+            The spectrum for which to calculate the intensity grid.
+        pos: array-like (default [0, 0])
+            The centroid position of the source on the subarray, in
+            microns, with [0,0] representing the center of the
+            central pixel.
+        jitter : float
+            The RMS jitter, in pixels. Assumes Gaussian white noise.
+        num_images : int (default 1000)
+            The number of images to simulate.
+        jitter_time : float (default 1)
+            The time between jitter samples, in seconds.
+        img_size: int (default 11)
+            The extent of the subarray, in pixels.
+        resolution: int (default 11)
+            The number of sub-pixels per pixel.
+
+        Returns
+        -------
+        jitter_noise : float
+            The noise from jitter, in e-.
+        '''
+        if self.jitter == 0:
+            num_images = 1
+        signal_list = np.zeros(num_images)
+        for i in range(num_images):
+            frame = self.observed_frame(spectrum, pos=pos,
+                                        jitter_time=jitter_time,
+                                        img_size=img_size,
+                                        resolution=resolution)
+            if i == 0:
+                # Calculate the optimal aperture from the first image.
+                aper = psfs.optimal_aperture(frame, self.single_pix_noise())
+            signal = np.sum(frame * aper)
+            signal_list[i] = signal
+        signal = np.mean(signal_list) * self.num_exposures
+        jitter_noise = np.std(signal_list) * np.sqrt(self.num_exposures)
         shot_noise = np.sqrt(signal)
-        n_aper = optimal_ap.sum()
-        # single-pixel noise sources
-        pix_dark_noise = np.sqrt(self.sensor.dark_current *
-                                     self.exposure_time)
-        pix_bkg_noise = np.sqrt(self.bkg_per_pix())
-        pix_read_noise = self.sensor.read_noise
-        # total noise in the optimal aperture
-        dark_noise = np.sqrt(self.num_exposures * n_aper) * pix_dark_noise
-        bkg_noise = np.sqrt(self.num_exposures * n_aper) * pix_bkg_noise
-        read_noise = np.sqrt(self.num_exposures * n_aper * pix_read_noise ** 2)
-        return('Shot noise: {:.2f}\nDark noise: {:.2f}\nBackground noise: {:.2f}\nRead noise: {:.2f}'.format(shot_noise, dark_noise, bkg_noise, read_noise))
-
-    def snr(self, spectrum, pos=np.array([0, 0])):
-        '''The snr of a given spectrum, using the optimal aperture.
-
-        Parameters
-        ----------
-        spectrum: pysynphot.spectrum object
-            The spectrum for which to calculate the snr.
-        pos: array-like (default [0, 0])
-            The centroid position of the source on the subarray, in
-            microns, with [0,0] representing the center of the
-            central pixel.
-
-        Returns
-        -------
-        snr: float
-            The signal to noise ratio for the spectrum.
-        '''
-        (signal, noise) = self.observation(spectrum, pos)[0:2]
-        snr = signal / noise
-        return snr
+        n_aper = aper.sum()
+        dark_noise = np.sqrt(n_aper * self.num_exposures *
+                             self.sensor.dark_current * self.exposure_time)
+        bkg_noise = np.sqrt(n_aper * self.num_exposures * self.bkg_per_pix())
+        read_noise = np.sqrt(n_aper * self.num_exposures *
+                             self.sensor.read_noise ** 2)
+        tot_noise = np.sqrt(jitter_noise ** 2 + shot_noise ** 2 +
+                            dark_noise ** 2 + bkg_noise ** 2 +
+                            read_noise ** 2)
+        results_dict = {'signal': signal, 'tot_noise': tot_noise,
+                        'jitter_noise': jitter_noise,
+                        'dark_noise': dark_noise, 'bkg_noise': bkg_noise,
+                        'read_noise': read_noise, 'shot_noise': shot_noise,
+                        'n_aper': int(n_aper), 'snr': signal / tot_noise}
+        return results_dict
 
 
-def blackbody_spec(temp, dist, l_bol):
-    '''Returns a blackbody spectrum with the desired properties.
-
-        Parameters
-        ----------
-        temp: float
-            The temperature of the blackbody, in K.
-        dist: float
-            The luminosity distance at which the spectrum is
-            specified, in Mpc.
-        l_bol: float
-            The bolometric luminosity of the source.
-        '''
-    # A default pysynphot blackbody is at 1 kpc and for a star with
-    # radius r_sun
-    spectrum = S.BlackBody(temp)
-    ztab = RedshiftLookup()
-    initial_z = ztab(10 ** -3)
-    obs_z = ztab(dist)
-    # Adjust the wavelengths of the source spectrum to account for
-    # the redshift, and the flux for the luminosity distance.
-    obs_wave = spectrum.wave * (1+initial_z) / (1+obs_z)
-    obs_flux = (spectrum.flux * (1+initial_z) / (1+obs_z)
-                * (10 ** -3 / dist) ** 2)
-    # Scale the flux using the desired bolometric luminosity
-    l_bol_scaling = l_bol / (4 * np.pi * constants.sigma *
-                             constants.R_SUN ** 2 * temp ** 4)
-    obs_flux *= l_bol_scaling
-    obs_spectrum = S.ArraySpectrum(obs_wave, obs_flux,
-                                   fluxunits=spectrum.fluxunits)
-    return obs_spectrum
-
-# Some tests of Observatory behavior, using a spectrum similar to the sun.
+# Some tests of Observatory behavior
 if __name__ == '__main__':
     data_folder = os.path.dirname(__file__) + '/../data/'
     sensor_bandpass = S.FileBandpass(data_folder + 'imx455.fits')
@@ -609,19 +506,11 @@ if __name__ == '__main__':
     v_bandpass = S.ObsBandpass('johnson,v')
     vis_bandpass = S.UniformTransmission(1.0)
 
-    flat_spec = S.FlatSpectrum(25, fluxunits='abmag')
+    flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
     flat_spec.convert('fnu')
-
-    # tess_geo_v = Observatory(telescope=mono_tele_v10, sensor=imx455,
-    #                          filter_bandpass=v_bandpass,
-    #                          exposure_time=300, num_exposures=3)
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass, eclip_lat=90,
-                               exposure_time=300, num_exposures=3)
-
-    # tess_geo_b = Observatory(telescope=mono_tele_v10, sensor=imx455,
-    #                          filter_bandpass=b_bandpass, eclip_lat=90,
-    #                          exposure_time=300, num_exposures=3)
-
-    print(tess_geo_obs.eff_area())
+                               exposure_time=300, num_exposures=3,
+                               jitter=0.0)
+    print(tess_geo_obs.observe(flat_spec, [0, 0]))

@@ -5,8 +5,9 @@ import tkinter as tk
 import pysynphot as S
 import numpy as np
 from spectra import *
-from observatory import Sensor, Telescope, Observatory, blackbody_spec
+from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
+# from jitter_tools import *
 import matplotlib.pyplot as plt
 
 data_folder = os.path.dirname(__file__) + '/../data/'
@@ -106,7 +107,8 @@ class MyGUI:
 
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
-                           'Limiting SNR', 'Ecliptic Latitude (deg)']
+                           'Limiting SNR', 'Ecliptic Latitude (deg)', 
+                           'Jitter (pix)']
         self.obs_boxes = []
         self.obs_vars = []
         for i, value in enumerate(obs_label_names):
@@ -122,13 +124,13 @@ class MyGUI:
         self.obs_vars[1].set(3)
         self.obs_vars[2].set(5)
         self.obs_vars[3].set(90)
-        self.obs_labels[-1].grid(row=17, column=0, padx=padx, pady=pady)
+        self.obs_labels[-1].grid(row=18, column=0, padx=padx, pady=pady)
         self.filter_options = list(filter_dict.keys())
         self.filter_default = tk.StringVar()
         self.filter_default.set('None')
         self.filter_menu = tk.OptionMenu(self.root, self.filter_default,
                                          *self.filter_options)
-        self.filter_menu.grid(row=17, column=1, padx=padx, pady=pady)
+        self.filter_menu.grid(row=18, column=1, padx=padx, pady=pady)
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
@@ -213,7 +215,7 @@ class MyGUI:
 
         self.spec_results_labels = []
         spec_results_label_names = ['Signal (e-)', 'Total Noise (e-)', 'Noise Breakdown', 'SNR',
-                                    'Photometric Precision', 'Optimal Aperture Size (pix)']
+                                    'Photometric Precision (ppm)', 'Optimal Aperture Size (pix)']
         self.spec_results_data = []
         for i, name in enumerate(spec_results_label_names):
             self.spec_results_labels.append(tk.Label(self.root, text=name))
@@ -238,6 +240,8 @@ class MyGUI:
         if self.tele_default.get() == 'Mono Tele V10UVS (UV Coatings)':
             # ~2 times the diffraction limit for f/4.8 and pivot wavelength 275 nm
             self.psf_sigma = 1.15
+        elif self.tele_default.get() == 'Mono Tele V9UVS (UV Coatings)':
+            self.psf_sigma = 1.15
         elif self.tele_default.get() == 'TESS Telescope':
             self.psf_sigma = 11
         elif self.tele_default.get() == 'Mono Tele V3UV':
@@ -259,16 +263,18 @@ class MyGUI:
         tele_vars[2] = S.UniformTransmission(tele_vars[2])
         tele = Telescope(*tele_vars)
         exposure_time = self.obs_vars[0].get()
-        num_exposures = self.obs_vars[1].get()
+        num_exposures = int(self.obs_vars[1].get())
         limiting_snr = self.obs_vars[2].get()
         eclip_angle = self.obs_vars[3].get()
         filter_bp = filter_dict[self.filter_default.get()]
+        jitter = self.obs_vars[4].get()
         observatory = Observatory(sens, tele, exposure_time=exposure_time,
                                   num_exposures=num_exposures,
                                   limiting_s_n=limiting_snr,
                                   filter_bandpass=filter_bp,
                                   psf_sigma=self.psf_sigma,
-                                  eclip_lat=eclip_angle)
+                                  eclip_lat=eclip_angle,
+                                  jitter=jitter)
         return observatory
 
     def set_spectrum(self):
@@ -292,16 +298,11 @@ class MyGUI:
     def run_calcs(self):
         spectrum = self.set_spectrum()
         observatory = self.set_obs()
-        (signal, noise, obs_grid, aper) = observatory.observation(spectrum)
-        signal = round(signal)
-        snr = signal / noise
-        phot_prec = 10 ** 6 / snr
-        n_aper = int(np.sum(aper))
         limiting_mag = observatory.limiting_mag()
         saturating_mag = observatory.saturating_mag()
 
         self.results_data[0].config(text=format(observatory.pix_scale, '4.3f'))
-        self.results_data[1].config(text=format(observatory.lambda_pivot() / 10, '4.1f'))
+        self.results_data[1].config(text=format(observatory.lambda_pivot / 10, '4.1f'))
         self.results_data[2].config(text=format(observatory.psf_fwhm(), '4.3f'))
         self.results_data[3].config(text=format(100 * observatory.central_pix_frac(), '4.1f') + '%')
         self.results_data[4].config(text=format(observatory.eff_area(), '4.2f'))
@@ -311,18 +312,22 @@ class MyGUI:
     def run_observation(self):
         spectrum = self.set_spectrum()
         observatory = self.set_obs()
-        (signal, noise, obs_grid, aper) = observatory.observation(spectrum)
-        signal = round(signal)
-        noise = round(noise)
-        snr = signal / noise
+        results = observatory.observe(spectrum)
+        signal = int(results['signal'])
+        noise = int(results['tot_noise'])
+        snr = signal // noise
         phot_prec = 10 ** 6 / snr
-        n_aper = int(np.sum(aper))
         self.spec_results_data[0].config(text=format(signal, '4d'))
         self.spec_results_data[1].config(text=format(noise, '4d'))
         self.spec_results_data[3].config(text=format(snr, '4.3f'))
-        self.spec_results_data[2].config(text=observatory.noise_breakdown(spectrum))
+        noise_str = ('Shot noise: ' + format(results['shot_noise'], '.2f') +
+                     '\nDark noise: ' + format(results['dark_noise'], '.2f') +
+                     '\nRead noise: ' + format(results['read_noise'], '.2f') +
+                     '\nBackground noise: ' + format(results['bkg_noise'], '.2f') +
+                     '\nJitter noise: ' + format(results['jitter_noise'], '.2f'))
+        self.spec_results_data[2].config(text=noise_str)
         self.spec_results_data[4].config(text=format(phot_prec, '4.3f'))
-        self.spec_results_data[5].config(text=format(n_aper, '2d'))
+        self.spec_results_data[5].config(text=format(results['n_aper'], '2d'))
 
 
 MyGUI()

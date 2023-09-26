@@ -50,6 +50,8 @@ sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
 v10_bandpass = S.UniformTransmission(0.693)
 mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
 
+mono_tele_v9_uv = Telescope(diam=20, f_num=4.8, bandpass=S.UniformTransmission(0.638))
+
 # V10 UVS telescope with visible coatings
 mono_tele_v10_vis = Telescope(diam=25, f_num=4.8, bandpass=S.UniformTransmission(0.758))
 # V10 UVS telescope with UV coatings
@@ -69,6 +71,7 @@ tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
 telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_vis,
                   'Mono Tele V10UVS (Visible Coatings)': mono_tele_v10_vis,
                   'Mono Tele V20UVS (Visible Coatings)': mono_tele_v20_vis,
+                  'Mono Tele V9UVS (UV Coatings)': mono_tele_v9_uv,
                   'Mono Tele V3UV': mono_tele_v3uv,
                   'Mono Tele V3SWIR': mono_tele_v3swir,
                   'TESS Telescope': tess_tele}
