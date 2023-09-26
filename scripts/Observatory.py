@@ -16,10 +16,10 @@ blackbody_spec
 '''
 
 import os
+import warnings
+import psfs
 import numpy as np
 import pysynphot as S
-import psfs
-import warnings
 from sky_background import bkg_spectrum
 from jitter_tools import jittered_array
 
@@ -420,6 +420,7 @@ class Observatory(object):
             The observed image.
         '''
 
+        pix_jitter = self.jitter / self.pix_scale
         initial_grid = self.signal_grid_fine(spectrum, pos,
                                              img_size, resolution)
         # Check that jitter sampling frequency is higher than frame rate
@@ -427,13 +428,14 @@ class Observatory(object):
             raise ValueError('Jitter sampling frequency must' +
                              'be higher than frame rate')
         num_steps = round(self.exposure_time // jitter_time)
-        avg_grid = jittered_array(initial_grid, num_steps, self.jitter)
+        avg_grid = jittered_array(initial_grid, num_steps, pix_jitter,
+                                  resolution=resolution)
         frame = avg_grid.reshape((img_size, resolution, img_size,
                                   resolution)).sum(axis=(1, 3))
         return frame
 
     def observe(self, spectrum, pos=[0, 0], num_images=100,
-                     jitter_time=1, img_size=11, resolution=11):
+                jitter_time=1, img_size=11, resolution=11):
         ''' Monte Carlo estimate of the signal and noise for a spectrum.
 
         Parameters

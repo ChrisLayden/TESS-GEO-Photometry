@@ -3,6 +3,7 @@ from redshift_lookup import RedshiftLookup
 import numpy as np
 import constants
 
+
 def blackbody_spec(temp, dist, l_bol):
     '''Returns a blackbody spectrum with the desired properties.
 
@@ -34,5 +35,6 @@ def blackbody_spec(temp, dist, l_bol):
     obs_spectrum = S.ArraySpectrum(obs_wave, obs_flux,
                                    fluxunits=spectrum.fluxunits)
     return obs_spectrum
+
 
 power_law_1 = S.PowerLaw(5000, -1)

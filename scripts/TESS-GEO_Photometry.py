@@ -108,7 +108,7 @@ class MyGUI:
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
                            'Limiting SNR', 'Ecliptic Latitude (deg)', 
-                           'Jitter (pix)']
+                           'RMS Jitter (arcsec)']
         self.obs_boxes = []
         self.obs_vars = []
         for i, value in enumerate(obs_label_names):
