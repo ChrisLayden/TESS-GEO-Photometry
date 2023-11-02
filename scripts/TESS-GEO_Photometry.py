@@ -315,7 +315,7 @@ class MyGUI:
         results = observatory.observe(spectrum)
         signal = int(results['signal'])
         noise = int(results['tot_noise'])
-        snr = signal // noise
+        snr = signal / noise
         phot_prec = 10 ** 6 / snr
         self.spec_results_data[0].config(text=format(signal, '4d'))
         self.spec_results_data[1].config(text=format(noise, '4d'))
