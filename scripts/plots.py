@@ -35,3 +35,13 @@ plt.ylabel('Quantum Efficiency')
 plt.ylim([0, 1])
 plt.title('IMX487 Quantum Efficiency')
 plt.show()
+
+# wavelengths = [200, 250, 300, 350, 400, 450, 500] # nm
+# hamamatsu_pd_response = np.array([0.1329, 0.1226, 0.1273, 0.1477, 0.1801, 0.2197, 0.2521]) # A/W
+# hamamatsu_pd_reading = np.array([0.002, 30.9, 25.0, 0.073, 0.232, 0.552, 0.715]) # nA
+# hamamatsu_power = hamamatsu_pd_reading / hamamatsu_pd_response # nW
+# plt.scatter(wavelengths, hamamatsu_power)
+# plt.xlabel('Wavelength (nm)')
+# plt.ylabel('Power Read by PD (nW)')
+# plt.yscale('log')
+# plt.show()
