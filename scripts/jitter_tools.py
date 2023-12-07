@@ -66,9 +66,19 @@ def jittered_array(arr, num_steps, pix_jitter, resolution):
     avg_arr : array-like
         The final intensity grid.
     '''
+    # Return error if jitter is too large for the subgrid. 
+    # Do this if 2.5*sigma is greater than half the subgrid size.
+    # This criterion corresponds to 1% of positions being outside the subgrid.
+    img_size = float(arr.shape[0])
+    if (2.5 * pix_jitter*resolution) > (img_size / 2):
+        raise ValueError("Jitter too large for subarray.")
     angles = np.random.uniform(low=0.0, high=2*np.pi, size=num_steps)
     displacements = np.random.normal(scale=pix_jitter * resolution,
                                      size=num_steps)
+    
+    # For any displacement that is too large, set it to the maximum allowed.
+    displacements[displacements > (img_size / 2)] = img_size / 2
+
     del_x_list = np.rint(np.cos(angles) * displacements).astype(int)
     del_y_list = np.rint(np.sin(angles) * displacements).astype(int)
     avg_arr = np.zeros_like(arr)

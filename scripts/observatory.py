@@ -514,5 +514,5 @@ if __name__ == '__main__':
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass, eclip_lat=90,
                                exposure_time=300, num_exposures=3,
-                               jitter=0.0)
-    print(tess_geo_obs.observe(flat_spec, [0, 0]))
+                               jitter=1)
+    print(tess_geo_obs.observe(flat_spec, [0, 0], img_size=15))

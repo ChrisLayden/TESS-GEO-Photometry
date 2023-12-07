@@ -7,8 +7,8 @@ import numpy as np
 from spectra import *
 from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
-# from jitter_tools import *
 import matplotlib.pyplot as plt
+from tkinter import messagebox
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -108,13 +108,16 @@ class MyGUI:
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
                            'Limiting SNR', 'Ecliptic Latitude (deg)', 
-                           'RMS Jitter (arcsec)']
+                           'RMS Jitter (arcsec)', 'Jittered Subarray Size (pix)']
         self.obs_boxes = []
         self.obs_vars = []
         for i, value in enumerate(obs_label_names):
             self.obs_labels.append(tk.Label(self.root, text=value))
             self.obs_labels[i].grid(row=i+13, column=0, padx=padx, pady=pady)
-            self.obs_vars.append(tk.DoubleVar())
+            if i > 5:
+                self.obs_vars.append(tk.DoubleVar())
+            else:
+                self.obs_vars.append(tk.IntVar())
             self.obs_boxes.append(tk.Entry(self.root, width=10,
                                            textvariable=self.obs_vars[i]))
             self.obs_boxes[i].grid(row=i+13, column=1, padx=padx, pady=pady)
@@ -124,13 +127,15 @@ class MyGUI:
         self.obs_vars[1].set(3)
         self.obs_vars[2].set(5)
         self.obs_vars[3].set(90)
-        self.obs_labels[-1].grid(row=18, column=0, padx=padx, pady=pady)
+        self.obs_vars[4].set(0.0)
+        self.obs_vars[5].set(11)
+        self.obs_labels[-1].grid(row=19, column=0, padx=padx, pady=pady)
         self.filter_options = list(filter_dict.keys())
         self.filter_default = tk.StringVar()
         self.filter_default.set('None')
         self.filter_menu = tk.OptionMenu(self.root, self.filter_default,
                                          *self.filter_options)
-        self.filter_menu.grid(row=18, column=1, padx=padx, pady=pady)
+        self.filter_menu.grid(row=19, column=1, padx=padx, pady=pady)
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
@@ -296,7 +301,6 @@ class MyGUI:
 
 
     def run_calcs(self):
-        spectrum = self.set_spectrum()
         observatory = self.set_obs()
         limiting_mag = observatory.limiting_mag()
         saturating_mag = observatory.saturating_mag()
@@ -310,24 +314,29 @@ class MyGUI:
         self.results_data[6].config(text=format(saturating_mag, '4.3f'))
 
     def run_observation(self):
-        spectrum = self.set_spectrum()
-        observatory = self.set_obs()
-        results = observatory.observe(spectrum)
-        signal = int(results['signal'])
-        noise = int(results['tot_noise'])
-        snr = signal / noise
-        phot_prec = 10 ** 6 / snr
-        self.spec_results_data[0].config(text=format(signal, '4d'))
-        self.spec_results_data[1].config(text=format(noise, '4d'))
-        self.spec_results_data[3].config(text=format(snr, '4.3f'))
-        noise_str = ('Shot noise: ' + format(results['shot_noise'], '.2f') +
-                     '\nDark noise: ' + format(results['dark_noise'], '.2f') +
-                     '\nRead noise: ' + format(results['read_noise'], '.2f') +
-                     '\nBackground noise: ' + format(results['bkg_noise'], '.2f') +
-                     '\nJitter noise: ' + format(results['jitter_noise'], '.2f'))
-        self.spec_results_data[2].config(text=noise_str)
-        self.spec_results_data[4].config(text=format(phot_prec, '4.3f'))
-        self.spec_results_data[5].config(text=format(results['n_aper'], '2d'))
+        try:
+            spectrum = self.set_spectrum()
+            observatory = self.set_obs()
+            img_size = self.obs_vars[5].get()
+            results = observatory.observe(spectrum, img_size=img_size)
+            signal = int(results['signal'])
+            noise = int(results['tot_noise'])
+            snr = signal / noise
+            phot_prec = 10 ** 6 / snr
+            self.spec_results_data[0].config(text=format(signal, '4d'))
+            self.spec_results_data[1].config(text=format(noise, '4d'))
+            self.spec_results_data[3].config(text=format(snr, '4.3f'))
+            noise_str = ('Shot noise: ' + format(results['shot_noise'], '.2f') +
+                        '\nDark noise: ' + format(results['dark_noise'], '.2f') +
+                        '\nRead noise: ' + format(results['read_noise'], '.2f') +
+                        '\nBackground noise: ' + format(results['bkg_noise'], '.2f') +
+                        '\nJitter noise: ' + format(results['jitter_noise'], '.2f'))
+            self.spec_results_data[2].config(text=noise_str)
+            self.spec_results_data[4].config(text=format(phot_prec, '4.3f'))
+            self.spec_results_data[5].config(text=format(results['n_aper'], '2d'))
+        except ValueError as inst:
+            messagebox.showerror('Value Error', inst)
+
 
 
 MyGUI()

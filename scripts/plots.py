@@ -1,8 +1,8 @@
 '''Makes plots related to TESS-GEO Photometry'''
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import pysynphot as S
 
 data_folder = os.path.dirname(__file__) + '/../data/'
@@ -26,15 +26,15 @@ imx487_meas_qe_hamamatsu = np.array([10.10, 6.65, 43.69, 46.57]) / 100
 # plt.title('IMX571 Quantum Efficiency')
 # plt.show()
 
-plt.plot(imx487_old_qe.wave / 10, imx487_old_qe.throughput, label='Lucid Vision Labs (Vendor) Spec')
-plt.scatter(imx487_meas_wave, imx487_meas_qe, label='Measured (ThorLabs PD)', c='r')
-plt.scatter(imx487_meas_wave_hamamatsu, imx487_meas_qe_hamamatsu, label='Measured (Hamamatsu PD)', c='g')
-plt.legend()
-plt.xlabel('Wavelength (nm)')
-plt.ylabel('Quantum Efficiency')
-plt.ylim([0, 1])
-plt.title('IMX487 Quantum Efficiency')
-plt.show()
+# plt.plot(imx487_old_qe.wave / 10, imx487_old_qe.throughput, label='Lucid Vision Labs (Vendor) Spec')
+# plt.scatter(imx487_meas_wave, imx487_meas_qe, label='Measured (ThorLabs PD)', c='r')
+# plt.scatter(imx487_meas_wave_hamamatsu, imx487_meas_qe_hamamatsu, label='Measured (Hamamatsu PD)', c='g')
+# plt.legend()
+# plt.xlabel('Wavelength (nm)')
+# plt.ylabel('Quantum Efficiency')
+# plt.ylim([0, 1])
+# plt.title('IMX487 Quantum Efficiency')
+# plt.show()
 
 # wavelengths = [200, 250, 300, 350, 400, 450, 500] # nm
 # hamamatsu_pd_response = np.array([0.1329, 0.1226, 0.1273, 0.1477, 0.1801, 0.2197, 0.2521]) # A/W
@@ -45,3 +45,4 @@ plt.show()
 # plt.ylabel('Power Read by PD (nW)')
 # plt.yscale('log')
 # plt.show()
+print(np.logspace(1, 100))
