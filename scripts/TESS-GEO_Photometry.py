@@ -114,7 +114,7 @@ class MyGUI:
         for i, value in enumerate(obs_label_names):
             self.obs_labels.append(tk.Label(self.root, text=value))
             self.obs_labels[i].grid(row=i+13, column=0, padx=padx, pady=pady)
-            if i > 5:
+            if i == 4:
                 self.obs_vars.append(tk.DoubleVar())
             else:
                 self.obs_vars.append(tk.IntVar())
@@ -123,8 +123,8 @@ class MyGUI:
             self.obs_boxes[i].grid(row=i+13, column=1, padx=padx, pady=pady)
 
         self.obs_labels.append(tk.Label(self.root, text='Select Filter'))
-        self.obs_vars[0].set(300)
-        self.obs_vars[1].set(3)
+        self.obs_vars[0].set(60)
+        self.obs_vars[1].set(1)
         self.obs_vars[2].set(5)
         self.obs_vars[3].set(90)
         self.obs_vars[4].set(0.0)
