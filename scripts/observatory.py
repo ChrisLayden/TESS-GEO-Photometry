@@ -424,9 +424,9 @@ class Observatory(object):
         initial_grid = self.signal_grid_fine(spectrum, pos,
                                              img_size, resolution)
         # Check that jitter sampling frequency is higher than frame rate
-        if jitter_time >= self.exposure_time:
-            raise ValueError('Jitter sampling frequency must' +
-                             'be higher than frame rate')
+        if (5 * jitter_time) >= self.exposure_time:
+            raise ValueError('Jitter sampling frequency must be ' +
+                             'at least 5 times higher than frame rate')
         num_steps = round(self.exposure_time // jitter_time)
         avg_grid = jittered_array(initial_grid, num_steps, pix_jitter,
                                   resolution=resolution)
