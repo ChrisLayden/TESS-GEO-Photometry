@@ -5,8 +5,7 @@
 import os
 import pysynphot as S
 import numpy as np
-from observatory import Observatory, Sensor, Telescope
-import matplotlib.pyplot as plt
+from observatory import Sensor, Telescope
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 

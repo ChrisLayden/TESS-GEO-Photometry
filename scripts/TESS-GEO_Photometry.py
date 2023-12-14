@@ -3,11 +3,9 @@
 import os
 import tkinter as tk
 import pysynphot as S
-import numpy as np
 from spectra import *
 from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
-import matplotlib.pyplot as plt
 from tkinter import messagebox
 
 data_folder = os.path.dirname(__file__) + '/../data/'
@@ -61,7 +59,7 @@ class MyGUI:
                                        *self.sens_options)
         self.sens_menu.grid(row=1, column=1, columnspan=1, padx=padx,
                             pady=pady)
-        self.sens_default.trace('w', self.set_sens)
+        self.sens_default.trace_add('write', self.set_sens)
 
         # Defining telescope properties
         self.tele_header = tk.Label(self.root, text='Telescope Properties',
@@ -97,8 +95,7 @@ class MyGUI:
                                        *self.tele_options)
         self.tele_menu.grid(row=8, column=1, columnspan=1, padx=padx,
                             pady=pady)
-        self.tele_default.trace('w', self.set_tele)
-
+        self.tele_default.trace_add('write', self.set_tele)
         # Defining observing properties
         self.obs_header = tk.Label(self.root, text='Observing Properties',
                                    font=['Arial', 16, 'bold'])
@@ -296,22 +293,25 @@ class MyGUI:
             spectrum_name = self.user_spec_name.get()
             spectrum = eval(spectrum_name)
         else:
-            raise 'No spectrum specified'
+            raise ValueError('No spectrum specified')
         return spectrum
 
 
     def run_calcs(self):
-        observatory = self.set_obs()
-        limiting_mag = observatory.limiting_mag()
-        saturating_mag = observatory.saturating_mag()
+        try:
+            observatory = self.set_obs()
+            limiting_mag = observatory.limiting_mag()
+            saturating_mag = observatory.saturating_mag()
 
-        self.results_data[0].config(text=format(observatory.pix_scale, '4.3f'))
-        self.results_data[1].config(text=format(observatory.lambda_pivot / 10, '4.1f'))
-        self.results_data[2].config(text=format(observatory.psf_fwhm(), '4.3f'))
-        self.results_data[3].config(text=format(100 * observatory.central_pix_frac(), '4.1f') + '%')
-        self.results_data[4].config(text=format(observatory.eff_area(), '4.2f'))
-        self.results_data[5].config(text=format(limiting_mag, '4.3f'))
-        self.results_data[6].config(text=format(saturating_mag, '4.3f'))
+            self.results_data[0].config(text=format(observatory.pix_scale, '4.3f'))
+            self.results_data[1].config(text=format(observatory.lambda_pivot / 10, '4.1f'))
+            self.results_data[2].config(text=format(observatory.psf_fwhm(), '4.3f'))
+            self.results_data[3].config(text=format(100 * observatory.central_pix_frac(), '4.1f') + '%')
+            self.results_data[4].config(text=format(observatory.eff_area(), '4.2f'))
+            self.results_data[5].config(text=format(limiting_mag, '4.3f'))
+            self.results_data[6].config(text=format(saturating_mag, '4.3f'))
+        except ValueError as inst:
+            messagebox.showerror('Value Error', inst)
 
     def run_observation(self):
         try:

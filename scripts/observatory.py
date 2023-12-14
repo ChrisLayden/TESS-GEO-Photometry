@@ -316,12 +316,14 @@ class Observatory(object):
         mag_10_spectrum = S.FlatSpectrum(10, fluxunits='abmag')
         mag_10_spectrum.convert('fnu')
         mag_10_signal = self.single_pix_signal(mag_10_spectrum)
+        bkg_signal = self.bkg_per_pix()
+        dark_noise = self.sensor.dark_current * self.exposure_time
+        if (bkg_signal + dark_noise) >= self.sensor.full_well:
+            raise ValueError('Noise itself saturates detector')
 
         def saturation_diff(mag):
             '''Difference between the pixel signal and full well capacity.'''
             signal = mag_10_signal * 10 ** ((10 - mag) / 2.5)
-            bkg_signal = self.bkg_per_pix()
-            dark_noise = self.sensor.dark_current * self.exposure_time
             return signal + bkg_signal + dark_noise - self.sensor.full_well
 
         # Newton-Raphson method for root-finding
@@ -397,7 +399,7 @@ class Observatory(object):
         pixel_grid = temp_grid.sum(axis=(1, 3))
         return pixel_grid
 
-    def observed_frame(self, spectrum, pos=[0, 0], jitter_time=1,
+    def observed_frame(self, spectrum, pos=np.array([0, 0]), jitter_time=1,
                        img_size=11, resolution=11):
         '''An actual observed frame, with simulated pointing jitter.
 
@@ -434,7 +436,7 @@ class Observatory(object):
                                   resolution)).sum(axis=(1, 3))
         return frame
 
-    def observe(self, spectrum, pos=[0, 0], num_images=100,
+    def observe(self, spectrum, pos=np.array([0, 0]), num_images=100,
                 jitter_time=1, img_size=11, resolution=11):
         ''' Monte Carlo estimate of the signal and noise for a spectrum.
 
@@ -513,6 +515,7 @@ if __name__ == '__main__':
 
     tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
                                filter_bandpass=vis_bandpass, eclip_lat=90,
-                               exposure_time=300, num_exposures=3,
-                               jitter=1)
+                               exposure_time=300, num_exposures=1,
+                               jitter=0.5)
+
     print(tess_geo_obs.observe(flat_spec, [0, 0], img_size=15))
