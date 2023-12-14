@@ -31,7 +31,7 @@ imx990_arr[:, 0] *= 10
 imx990_qe = S.ArrayBandpass(imx990_arr[:, 0], imx990_arr[:, 1])
 # Lowest gain mode at -30 deg C
 imx990_low_gain = Sensor(pix_size=5, read_noise=150, dark_current=47.7,
-                full_well=120000, qe=imx990_qe)
+                         full_well=120000, qe=imx990_qe)
 # Highest gain mode at -60 deg C
 imx990 = Sensor(pix_size=5, read_noise=20, dark_current=10,
                 full_well=2000, qe=imx990_qe)
@@ -49,7 +49,8 @@ sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
 v10_bandpass = S.UniformTransmission(0.693)
 mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
 
-mono_tele_v9_uv = Telescope(diam=20, f_num=4.8, bandpass=S.UniformTransmission(0.638))
+mono_tele_v8_uv = Telescope(diam=17.5, f_num=4.5, bandpass=S.UniformTransmission(0.638))
+mono_tele_v8_vis = Telescope(diam=17.5, f_num=4.5, bandpass=S.UniformTransmission(0.758))
 
 # V10 UVS telescope with visible coatings
 mono_tele_v10_vis = Telescope(diam=25, f_num=4.8, bandpass=S.UniformTransmission(0.758))
@@ -68,9 +69,10 @@ tess_tele_thru = S.UniformTransmission(0.6315)
 tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
 
 telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_vis,
-                  'Mono Tele V10UVS (Visible Coatings)': mono_tele_v10_vis,
-                  'Mono Tele V20UVS (Visible Coatings)': mono_tele_v20_vis,
-                  'Mono Tele V9UVS (UV Coatings)': mono_tele_v9_uv,
+                  'Mono Tele V10UVS (Vis/SWIR Coatings)': mono_tele_v10_vis,
+                  'Mono Tele V8UVS (UV Coatings)': mono_tele_v8_uv,
+                  'Mono Tele V8UVS (Vis/SWIR Coatings)': mono_tele_v8_vis,
+                  'Mono Tele V20UVS (Vis/SWIR Coatings)': mono_tele_v20_vis,
                   'Mono Tele V3UV': mono_tele_v3uv,
                   'Mono Tele V3SWIR': mono_tele_v3swir,
                   'TESS Telescope': tess_tele}

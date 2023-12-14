@@ -104,7 +104,7 @@ class MyGUI:
 
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
-                           'Limiting SNR', 'Ecliptic Latitude (deg)', 
+                           'Limiting SNR', 'Ecliptic Latitude (deg)',
                            'RMS Jitter (arcsec)', 'Jittered Subarray Size (pix)']
         self.obs_boxes = []
         self.obs_vars = []
@@ -136,15 +136,15 @@ class MyGUI:
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
-                                        font=['Arial', 16, 'bold'])
+                                       font=['Arial', 16, 'bold'])
         self.results_header.grid(row=0, column=4, columnspan=1, padx=padx,
-                                  pady=pady)
+                                 pady=pady)
 
         self.run_button = tk.Button(self.root, fg='green',
-                                        text='RUN',
-                                        command=self.run_calcs)
+                                    text='RUN',
+                                    command=self.run_calcs)
         self.run_button.grid(row=0, column=5, columnspan=1, padx=padx,
-                                 pady=pady)
+                             pady=pady)
 
         self.results_labels = []
         results_label_names = ['Pixel Scale (arcsec/pix)', 'Pivot Wavelength (nm)',
@@ -165,9 +165,9 @@ class MyGUI:
                                   pady=pady)
 
         self.run_button = tk.Button(self.root, fg='green', text='RUN',
-                                        command=self.run_observation)
+                                    command=self.run_observation)
         self.run_button.grid(row=0, column=7, columnspan=1, padx=padx,
-                                 pady=pady)
+                             pady=pady)
 
         self.flat_spec_bool = tk.BooleanVar(value=True)
         self.flat_spec_check = tk.Checkbutton(self.root,
@@ -296,7 +296,6 @@ class MyGUI:
             raise ValueError('No spectrum specified')
         return spectrum
 
-
     def run_calcs(self):
         try:
             observatory = self.set_obs()
@@ -327,16 +326,15 @@ class MyGUI:
             self.spec_results_data[1].config(text=format(noise, '4d'))
             self.spec_results_data[3].config(text=format(snr, '4.3f'))
             noise_str = ('Shot noise: ' + format(results['shot_noise'], '.2f') +
-                        '\nDark noise: ' + format(results['dark_noise'], '.2f') +
-                        '\nRead noise: ' + format(results['read_noise'], '.2f') +
-                        '\nBackground noise: ' + format(results['bkg_noise'], '.2f') +
-                        '\nJitter noise: ' + format(results['jitter_noise'], '.2f'))
+                         '\nDark noise: ' + format(results['dark_noise'], '.2f') +
+                         '\nRead noise: ' + format(results['read_noise'], '.2f') +
+                         '\nBackground noise: ' + format(results['bkg_noise'], '.2f') +
+                         '\nJitter noise: ' + format(results['jitter_noise'], '.2f'))
             self.spec_results_data[2].config(text=noise_str)
             self.spec_results_data[4].config(text=format(phot_prec, '4.3f'))
             self.spec_results_data[5].config(text=format(results['n_aper'], '2d'))
         except ValueError as inst:
             messagebox.showerror('Value Error', inst)
-
 
 
 MyGUI()
