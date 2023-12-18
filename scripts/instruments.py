@@ -20,6 +20,13 @@ imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
 imx487 = Sensor(pix_size=2.74, read_noise=2.51, dark_current=5**-4,
                 full_well=100000, qe=imx487_qe)
 
+gsense2020_arr = np.genfromtxt(data_folder + 'GSENSE2020_QE.csv', delimiter=',')
+# Multiply the first column by 10 to convert from nm to Angstroms
+gsense2020_qe = S.ArrayBandpass(gsense2020_arr[:, 0] * 10, gsense2020_arr[:, 1])
+# Dark current at -20 C
+gsense2020 = Sensor(pix_size=6.5, read_noise=2.67, dark_current=0.2,
+                    full_well=54000, qe=gsense2020_qe)
+
 ultrasat_arr = np.genfromtxt(data_folder + 'ULTRASAT_QE.csv', delimiter=',')
 ultrasat_qe = S.ArrayBandpass(ultrasat_arr[:, 0], ultrasat_arr[:, 1])
 ultrasat_cmos = Sensor(pix_size=9.5, read_noise=3.5, dark_current=0.026,
@@ -42,6 +49,7 @@ tesscam = Sensor(pix_size=15, read_noise=10, dark_current=5**-4,
                  full_well=200000, qe=tess_qe)
 
 sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
+               'GSENSE2020 (UV)': gsense2020,
                'TESS CCD': tesscam, 'ULTRASAT CMOS': ultrasat_cmos,
                'IMX 990 (SWIR)': imx990}
 
