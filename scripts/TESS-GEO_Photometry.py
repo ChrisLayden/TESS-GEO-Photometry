@@ -15,7 +15,6 @@ class MyGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title('Photometry Calculations')
-        self.psf_sigma = None
 
         padx = 10
         pady = 5
@@ -67,21 +66,31 @@ class MyGUI:
         self.tele_header.grid(row=7, column=0, columnspan=2, padx=padx,
                               pady=pady)
         self.tele_labels = []
-        tele_label_names = ['Diameter (cm)', 'F/number', 'Bandpass']
+        tele_label_names = ['Diameter (cm)', 'F/number', 'PSF Type', 'Spot Size FWHM (times diffraction limit)', 'Bandpass']
         self.tele_boxes = []
         self.tele_vars = []
         for i in range(len(tele_label_names)):
             self.tele_labels.append(tk.Label(self.root,
                                              text=tele_label_names[i]))
             self.tele_labels[i].grid(row=i+9, column=0, padx=padx, pady=pady)
-            self.tele_vars.append(tk.DoubleVar())
-            self.tele_boxes.append(tk.Entry(self.root, width=10,
-                                            textvariable=self.tele_vars[i]))
+            if i == 2:
+                self.tele_vars.append(tk.StringVar())
+                self.tele_boxes.append(tk.OptionMenu(self.root, self.tele_vars[i],
+                                                     'airy', 'gaussian'))
+                # self.tele_boxes[i].grid(row=i+9, column=1, padx=padx, pady=pady)
+            else:
+                self.tele_vars.append(tk.DoubleVar())
+                self.tele_boxes.append(tk.Entry(self.root, width=10,
+                                                textvariable=self.tele_vars[i]))
             self.tele_boxes[i].grid(row=i+9, column=1, padx=padx, pady=pady)
 
         self.tele_vars[0].set(10)
         self.tele_vars[1].set(10)
-        self.tele_vars[2].set(1)
+        self.tele_vars[2].set('airy')
+        self.tele_vars[2].trace_add('write', self.gray_if_airy)
+        self.tele_vars[3].set(1)
+        self.tele_boxes[3].config(state='disabled')
+        self.tele_vars[4].set(1)
 
         # If you want to select a default telescope
         self.tele_menu_header = tk.Label(self.root, text='Predefined Telescope',
@@ -99,7 +108,7 @@ class MyGUI:
         # Defining observing properties
         self.obs_header = tk.Label(self.root, text='Observing Properties',
                                    font=['Arial', 16, 'bold'])
-        self.obs_header.grid(row=12, column=0, columnspan=2, padx=padx,
+        self.obs_header.grid(row=14, column=0, columnspan=2, padx=padx,
                              pady=pady)
 
         self.obs_labels = []
@@ -110,14 +119,14 @@ class MyGUI:
         self.obs_vars = []
         for i, value in enumerate(obs_label_names):
             self.obs_labels.append(tk.Label(self.root, text=value))
-            self.obs_labels[i].grid(row=i+13, column=0, padx=padx, pady=pady)
+            self.obs_labels[i].grid(row=i+15, column=0, padx=padx, pady=pady)
             if i == 4:
                 self.obs_vars.append(tk.DoubleVar())
             else:
                 self.obs_vars.append(tk.IntVar())
             self.obs_boxes.append(tk.Entry(self.root, width=10,
                                            textvariable=self.obs_vars[i]))
-            self.obs_boxes[i].grid(row=i+13, column=1, padx=padx, pady=pady)
+            self.obs_boxes[i].grid(row=i+15, column=1, padx=padx, pady=pady)
 
         self.obs_labels.append(tk.Label(self.root, text='Select Filter'))
         self.obs_vars[0].set(60)
@@ -126,13 +135,13 @@ class MyGUI:
         self.obs_vars[3].set(90)
         self.obs_vars[4].set(0.0)
         self.obs_vars[5].set(11)
-        self.obs_labels[-1].grid(row=19, column=0, padx=padx, pady=pady)
+        self.obs_labels[-1].grid(row=21, column=0, padx=padx, pady=pady)
         self.filter_options = list(filter_dict.keys())
         self.filter_default = tk.StringVar()
         self.filter_default.set('None')
         self.filter_menu = tk.OptionMenu(self.root, self.filter_default,
                                          *self.filter_options)
-        self.filter_menu.grid(row=19, column=1, padx=padx, pady=pady)
+        self.filter_menu.grid(row=21, column=1, padx=padx, pady=pady)
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
@@ -237,22 +246,28 @@ class MyGUI:
         self.sens_boxes[3].config(textvariable=self.sens_vars[3])
         self.sens_vars[3].set('ARRAY')
 
+    def gray_if_airy(self, *args):
+        '''If the PSF type is set to airy, set the spot size FWHM to 1 and don't let it change.'''
+        if self.tele_vars[2].get() == 'airy':
+            self.tele_vars[3].set(1)
+            self.tele_boxes[3].config(state='disabled')
+        else:
+            self.tele_boxes[3].config(state='normal')
+
     def set_tele(self, *args):
         self.tele = telescope_dict[self.tele_default.get()]
-        if self.tele_default.get() == 'Mono Tele V10UVS (UV Coatings)':
-            # ~2 times the diffraction limit for f/4.8 and pivot wavelength 275 nm
-            self.psf_sigma = 1.15
-        elif self.tele_default.get() == 'Mono Tele V9UVS (UV Coatings)':
-            self.psf_sigma = 1.15
-        elif self.tele_default.get() == 'TESS Telescope':
+        # if self.tele_default.get() == 'Mono Tele V10UVS (UV Coatings)':
+        #     # ~2 times the diffraction limit for f/4.8 and pivot wavelength 275 nm
+        #     self.psf_sigma = 1.15
+        # elif self.tele_default.get() == 'Mono Tele V9UVS (UV Coatings)':
+        #     self.psf_sigma = 1.15
+        if self.tele_default.get() == 'TESS Telescope':
             self.psf_sigma = 11
-        elif self.tele_default.get() == 'Mono Tele V3UV':
-            self.psf_sigma = 0.863
-        else:
-            self.psf_sigma = None
         self.tele_vars[0].set(self.tele.diam)
         self.tele_vars[1].set(self.tele.f_num)
-        self.tele_vars[2].set(self.tele.bandpass)
+        self.tele_vars[2].set(self.tele.psf_type)
+        self.tele_vars[3].set(self.tele.spot_size)
+        self.tele_vars[4].set(self.tele.bandpass)
 
     def set_obs(self):
         sens_vars = [i.get() for i in self.sens_vars]
@@ -262,7 +277,7 @@ class MyGUI:
             sens_vars[3] = S.UniformTransmission(float(sens_vars[3]))
         sens = Sensor(*sens_vars)
         tele_vars = [i.get() for i in self.tele_vars]
-        tele_vars[2] = S.UniformTransmission(tele_vars[2])
+        tele_vars[4] = S.UniformTransmission(tele_vars[4])
         tele = Telescope(*tele_vars)
         exposure_time = self.obs_vars[0].get()
         num_exposures = int(self.obs_vars[1].get())
@@ -274,7 +289,6 @@ class MyGUI:
                                   num_exposures=num_exposures,
                                   limiting_s_n=limiting_snr,
                                   filter_bandpass=filter_bp,
-                                  psf_sigma=self.psf_sigma,
                                   eclip_lat=eclip_angle,
                                   jitter=jitter)
         return observatory

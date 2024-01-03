@@ -85,7 +85,8 @@ class Telescope(object):
     plate_scale: float
         The focal plate scale, in um/arcsec
     '''
-    def __init__(self, diam, f_num, bandpass=S.UniformTransmission(1)):
+    def __init__(self, diam, f_num, psf_type='airy', spot_size=1.0,
+                 bandpass=S.UniformTransmission(1)):
         '''Initializing a telescope object.
 
         Parameters
@@ -94,6 +95,11 @@ class Telescope(object):
             Diameter of the primary aperture, in cm
         f_num: float
             Ratio of the focal length to diam
+        psf_type: string
+            The name of the PSF to use. Options are 'airy' and 'gaussian'.
+        spot_size: float
+            The spot size (i.e., standard distribution of the psf), relative
+            to the diffraction limit. Only used for Gaussian PSFs.
         bandpass: pysynphot.bandpass object
             The telescope bandpass as a function of wavelength,
             accounting for throughput and any geometric blocking
@@ -105,6 +111,8 @@ class Telescope(object):
         self.f_num = f_num
         self.bandpass = bandpass
         self.focal_length = self.diam * self.f_num
+        self.psf_type = psf_type
+        self.spot_size = spot_size
         self.plate_scale = 206265 / (self.focal_length * 10**4)
 
 
@@ -114,7 +122,7 @@ class Observatory(object):
     def __init__(
             self, sensor, telescope, filter_bandpass=1,
             exposure_time=1., num_exposures=1, eclip_lat=90,
-            limiting_s_n=5., psf_sigma=None, jitter=0):
+            limiting_s_n=5., jitter=0):
 
         '''Initialize Observatory class attributes.
 
@@ -134,8 +142,6 @@ class Observatory(object):
             The ecliptic latitude of the target, in degrees.
         limiting_s_n: float
             The signal-to-noise ratio constituting a detection.
-        psf_sigma: float
-            The standard deviation of the PSF, in microns.
         jitter: float
             The 1-sigma jitter of the telescope, in arcseconds.
             Assumes Gaussian white noise.
@@ -158,7 +164,6 @@ class Observatory(object):
             array_bp = S.ArrayBandpass(wavelengths, np.ones(len(wavelengths)))
             self.bandpass = self.bandpass * array_bp
         self.lambda_pivot = self.bandpass.pivot()
-        self.psf_sigma = psf_sigma
 
         self.exposure_time = exposure_time
         self.num_exposures = num_exposures
@@ -213,19 +218,21 @@ class Observatory(object):
 
     def psf_fwhm(self):
         '''The full width at half maximum of the PSF, in microns.'''
-        if self.psf_sigma is None:
-            fwhm = 1.025 * self.lambda_pivot * self.telescope.f_num / 10 ** 4
-        else:
-            fwhm = 2.355 * self.psf_sigma
+        diff_lim_fwhm = 1.025 * self.lambda_pivot * self.telescope.f_num / 10 ** 4
+        if self.telescope.psf_type == 'airy':
+            fwhm = diff_lim_fwhm
+        elif self.telescope.psf_type == 'gaussian':
+            fwhm = diff_lim_fwhm * self.telescope.spot_size
         return fwhm
 
     def central_pix_frac(self):
         '''The fraction of the total signal in the central pixel.'''
-        if self.psf_sigma is not None:
+        if self.telescope.psf_type == 'gaussian':
+            psf_sigma = self.psf_fwhm() / 2.355
             half_width = self.sensor.pix_size / 2
-            pix_frac = psfs.gaussian_ensq_energy(half_width, self.psf_sigma,
-                                                 self.psf_sigma)
-        else:
+            pix_frac = psfs.gaussian_ensq_energy(half_width, psf_sigma,
+                                                 psf_sigma)
+        elif self.telescope.psf_type == 'airy':
             half_width = (np.pi * self.sensor.pix_size /
                           (2 * self.telescope.f_num *
                            self.lambda_pivot * 10 ** -4))
@@ -364,11 +371,12 @@ class Observatory(object):
             The number of sub-pixels per pixel.
         '''
         tot_signal = self.tot_signal(spectrum)
-        if self.psf_sigma is not None:
-            cov_mat = [[self.psf_sigma ** 2, 0], [0, self.psf_sigma ** 2]]
+        if self.telescope.psf_type == 'gaussian':
+            psf_sigma = self.psf_fwhm() / 2.355
+            cov_mat = [[psf_sigma ** 2, 0], [0, psf_sigma ** 2]]
             psf_grid = psfs.gaussian_psf(img_size, resolution,
                                          self.sensor.pix_size, pos, cov_mat)
-        else:
+        elif self.telescope.psf_type == 'airy':
             psf_grid = psfs.airy_disk(img_size, resolution,
                                       self.sensor.pix_size, pos,
                                       self.telescope.f_num,
@@ -501,11 +509,11 @@ class Observatory(object):
 if __name__ == '__main__':
     data_folder = os.path.dirname(__file__) + '/../data/'
     sensor_bandpass = S.FileBandpass(data_folder + 'imx455.fits')
-    telescope_bandpass = S.UniformTransmission(0.693)
+    telescope_bandpass = S.UniformTransmission(0.758)
     imx455 = Sensor(pix_size=3.76, read_noise=1.65, dark_current=1.5*10**-3,
                     full_well=51000, qe=sensor_bandpass)
 
-    mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=telescope_bandpass)
+    mono_tele_v10uvs = Telescope(diam=25, f_num=4.8, psf_type='airy', bandpass=telescope_bandpass)
     b_bandpass = S.ObsBandpass('johnson,b')
     v_bandpass = S.ObsBandpass('johnson,v')
     vis_bandpass = S.UniformTransmission(1.0)
@@ -513,9 +521,11 @@ if __name__ == '__main__':
     flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
     flat_spec.convert('fnu')
 
-    tess_geo_obs = Observatory(telescope=mono_tele_v10, sensor=imx455,
+    tess_geo_obs = Observatory(telescope=mono_tele_v10uvs, sensor=imx455,
                                filter_bandpass=vis_bandpass, eclip_lat=90,
-                               exposure_time=300, num_exposures=1,
-                               jitter=0.5)
+                               exposure_time=60, num_exposures=1,
+                               jitter=0.)
 
+    print(tess_geo_obs.psf_fwhm())
     print(tess_geo_obs.observe(flat_spec, [0, 0], img_size=15))
+    print(tess_geo_obs.limiting_mag())

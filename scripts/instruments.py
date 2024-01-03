@@ -26,6 +26,9 @@ gsense2020_qe = S.ArrayBandpass(gsense2020_arr[:, 0] * 10, gsense2020_arr[:, 1])
 # Dark current at -20 C
 gsense2020 = Sensor(pix_size=6.5, read_noise=2.67, dark_current=0.2,
                     full_well=54000, qe=gsense2020_qe)
+# Dark current at -40 C
+gsense4040 = Sensor(pix_size=9, read_noise=2.3, dark_current=0.04,
+                    full_well=39000, qe=gsense2020_qe)
 
 ultrasat_arr = np.genfromtxt(data_folder + 'ULTRASAT_QE.csv', delimiter=',')
 ultrasat_qe = S.ArrayBandpass(ultrasat_arr[:, 0], ultrasat_arr[:, 1])
@@ -55,28 +58,35 @@ sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
 
 # Defining telescopes
 v10_bandpass = S.UniformTransmission(0.693)
-mono_tele_v10 = Telescope(diam=25, f_num=8, bandpass=v10_bandpass)
+mono_tele_v10 = Telescope(diam=25, f_num=8, psf_type='airy', bandpass=v10_bandpass)
 
-mono_tele_v8_uv = Telescope(diam=17.5, f_num=4.5, bandpass=S.UniformTransmission(0.638))
-mono_tele_v8_vis = Telescope(diam=17.5, f_num=4.5, bandpass=S.UniformTransmission(0.758))
+mono_tele_v8_uv = Telescope(diam=17.5, f_num=4.5, psf_type='gaussian',
+                            spot_size=2, bandpass=S.UniformTransmission(0.638))
+mono_tele_v8_vis = Telescope(diam=17.5, f_num=4.5, psf_type='airy',
+                             bandpass=S.UniformTransmission(0.758))
 
-# V10 UVS telescope with visible coatings
-mono_tele_v10_vis = Telescope(diam=25, f_num=4.8, bandpass=S.UniformTransmission(0.758))
 # V10 UVS telescope with UV coatings
-mono_tele_v10_uv = Telescope(diam=25, f_num=4.8, bandpass=S.UniformTransmission(0.638))
+mono_tele_v10_uv = Telescope(diam=25, f_num=4.8, psf_type='gaussian',
+                             spot_size=2, bandpass=S.UniformTransmission(0.638))
+# V10 UVS telescope with visible coatings
+mono_tele_v10_vis = Telescope(diam=25, f_num=4.8, psf_type='airy',
+                              bandpass=S.UniformTransmission(0.758))
 
-mono_tele_v20_vis = Telescope(diam=47, f_num=4.8, bandpass=S.UniformTransmission(0.758))
+
+mono_tele_v20_vis = Telescope(diam=47, f_num=4.8, psf_type='airy',
+                              bandpass=S.UniformTransmission(0.758))
 
 v3uv_bandpass = S.UniformTransmission(0.54)
 v3swir_bandpass = S.UniformTransmission(0.54*0.95/0.8)
-mono_tele_v3uv = Telescope(diam=8.5, f_num=3.6, bandpass=v3uv_bandpass)
-mono_tele_v3swir = Telescope(diam=8.5, f_num=3.6, bandpass=v3swir_bandpass)
+mono_tele_v3uv = Telescope(diam=8.5, f_num=3.6, psf_type='gaussian', 
+                           spot_size=2, bandpass=v3uv_bandpass)
+mono_tele_v3swir = Telescope(diam=8.5, f_num=3.6, psf_type='airy', bandpass=v3swir_bandpass)
 
 # Transmission is scaled to give 15,000 e-/s from a mag 10 star
 tess_tele_thru = S.UniformTransmission(0.6315)
-tess_tele = Telescope(diam=10.5, f_num=1.4, bandpass=tess_tele_thru)
+tess_tele = Telescope(diam=10.5, f_num=1.4, psf_type='gaussian', spot_size=22.91, bandpass=tess_tele_thru)
 
-telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_vis,
+telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_uv,
                   'Mono Tele V10UVS (Vis/SWIR Coatings)': mono_tele_v10_vis,
                   'Mono Tele V8UVS (UV Coatings)': mono_tele_v8_uv,
                   'Mono Tele V8UVS (Vis/SWIR Coatings)': mono_tele_v8_vis,

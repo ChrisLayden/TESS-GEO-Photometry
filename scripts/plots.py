@@ -4,6 +4,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import pysynphot as S
+from astropy.io import fits
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 imx571_old_qe = S.FileBandpass(data_folder + 'imx571.fits')
@@ -20,6 +21,7 @@ imx487_meas_qe_hamamatsu = np.array([10.10, 6.65, 43.69, 46.57]) / 100
 
 # Return a csv file with imx487_meas_wave and imx487_meas_qe, with 3 decimal places
 np.savetxt('imx487.csv', np.transpose([imx487_meas_wave, imx487_meas_qe]), delimiter=',', header='Wavelength (nm), QE', fmt='%.3f')
+
 
 # plt.plot(imx571_old_qe.wave / 10, imx571_old_qe.throughput, label='QHY (Alternate Vendor) Spec')
 # plt.scatter(imx571_meas_wave, imx571_meas_qe, label='Measured', c='r')
