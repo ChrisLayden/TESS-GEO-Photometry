@@ -290,7 +290,7 @@ if __name__ == '__main__':
     bkg_spec[:, 0] *= 1000 # Convert to eV
 
     source_spec = power_law(1e-13, 3.0, ene_low=200, ene_high=10000)
-    print(snr(tess_geo_eff_area, 0.1, source_spec, bkg_spec, 10 ** 4, 1))
+    print(snr(tess_geo_eff_area, 0.5, source_spec, bkg_spec, 10 ** 4, 1))
 
     # # # GRB spectrum. x: E (eV); y: E^2*N(E) (erg/cm^2/s)
     # # grb_spec = np.genfromtxt(data_folder + 'grb_spectrum.csv', delimiter=',', skip_header=1)

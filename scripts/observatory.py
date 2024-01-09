@@ -21,7 +21,7 @@ import psfs
 import numpy as np
 import pysynphot as S
 from sky_background import bkg_spectrum
-from jitter_tools import jittered_array
+from jitter_tools import jittered_array, integrated_stability
 
 
 class Sensor(object):
@@ -122,7 +122,7 @@ class Observatory(object):
     def __init__(
             self, sensor, telescope, filter_bandpass=1,
             exposure_time=1., num_exposures=1, eclip_lat=90,
-            limiting_s_n=5., jitter=0):
+            limiting_s_n=5., jitter=None, jitter_psd=None):
 
         '''Initialize Observatory class attributes.
 
@@ -144,7 +144,13 @@ class Observatory(object):
             The signal-to-noise ratio constituting a detection.
         jitter: float
             The 1-sigma jitter of the telescope, in arcseconds.
-            Assumes Gaussian white noise.
+            Assumes jitter with a fixed variance at any timescale.
+            Either this or jitter_psd must be specified, and
+            jitter_psd takes precedence.
+        jitter_psd: array-like (n x 2)
+            The power spectral density of the jitter.
+            Contains two columns: the first is the frequency, in Hz, and
+            the second is the PSD, in arcseconds^2/Hz.
         '''
 
         self.sensor = sensor
@@ -172,6 +178,10 @@ class Observatory(object):
         plate_scale = 206265 / (self.telescope.focal_length * 10**4)
         self.pix_scale = plate_scale * self.sensor.pix_size
         self.jitter = jitter
+        self.jitter_psd = jitter_psd
+        # Either jitter or jitter_psd must be specified
+        if self.jitter is None and self.jitter_psd is None:
+            raise ValueError('Must specify either jitter or jitter_psd.')
 
     def binset(self, spectrum):
         '''Narrowest binset from telescope, sensor, filter, and spectrum.'''
@@ -407,7 +417,7 @@ class Observatory(object):
         pixel_grid = temp_grid.sum(axis=(1, 3))
         return pixel_grid
 
-    def observed_frame(self, spectrum, pos=np.array([0, 0]), jitter_time=1,
+    def observed_frame(self, spectrum, pos=np.array([0, 0]),
                        img_size=11, resolution=11):
         '''An actual observed frame, with simulated pointing jitter.
 
@@ -429,23 +439,31 @@ class Observatory(object):
         image : array-like
             The observed image.
         '''
-
-        pix_jitter = self.jitter / self.pix_scale
+        if self.jitter_psd is not None:
+            # Convert the PSD values in self.jitter_psd to pixels^2/Hz
+            jitter_psd_pix = self.jitter_psd.copy()
+            jitter_psd_pix[:, 1] = jitter_psd_pix[:, 1] / self.pix_scale ** 2
+            pix_jitter = None
+        else:
+            pix_jitter = self.jitter / self.pix_scale
+            jitter_psd_pix = None
         initial_grid = self.signal_grid_fine(spectrum, pos,
                                              img_size, resolution)
-        # Check that jitter sampling frequency is higher than frame rate
-        if (5 * jitter_time) >= self.exposure_time:
-            raise ValueError('Jitter sampling frequency must be ' +
-                             'at least 5 times higher than frame rate')
-        num_steps = round(self.exposure_time // jitter_time)
-        avg_grid = jittered_array(initial_grid, num_steps, pix_jitter,
-                                  resolution=resolution)
+        if self.jitter == 0 and self.jitter_psd is None:
+            return initial_grid.reshape((img_size, resolution, img_size,
+                                         resolution)).sum(axis=(1, 3))
+        # Sample at a high enough rate to get at least 5 jitter
+        # steps per exposure, and no slower than every 0.5 s.
+        jitter_time = np.min([self.exposure_time / 5.0, 0.5])
+        avg_grid = jittered_array(initial_grid, self.exposure_time,
+                                  jitter_time, resolution=resolution,
+                                  psd=jitter_psd_pix, pix_jitter=pix_jitter)
         frame = avg_grid.reshape((img_size, resolution, img_size,
                                   resolution)).sum(axis=(1, 3))
         return frame
 
     def observe(self, spectrum, pos=np.array([0, 0]), num_images=100,
-                jitter_time=1, img_size=11, resolution=11):
+                img_size=11, resolution=11):
         ''' Monte Carlo estimate of the signal and noise for a spectrum.
 
         Parameters
@@ -457,11 +475,9 @@ class Observatory(object):
             microns, with [0,0] representing the center of the
             central pixel.
         jitter : float
-            The RMS jitter, in pixels. Assumes Gaussian white noise.
-        num_images : int (default 1000)
+            The RMS jitter, in pixels. Assumes fixed RMS.
+        num_images : int (default 100)
             The number of images to simulate.
-        jitter_time : float (default 1)
-            The time between jitter samples, in seconds.
         img_size: int (default 11)
             The extent of the subarray, in pixels.
         resolution: int (default 11)
@@ -472,17 +488,19 @@ class Observatory(object):
         jitter_noise : float
             The noise from jitter, in e-.
         '''
+        
         if self.jitter == 0:
             num_images = 1
+        # Note that for each find the optimal aperture for each individual
+        # frame, rather than finding one aperture and using it for all frames.
+        # This yields the best SNR for the stack, and it's not very
+        # computationally expensive.
         signal_list = np.zeros(num_images)
         for i in range(num_images):
             frame = self.observed_frame(spectrum, pos=pos,
-                                        jitter_time=jitter_time,
                                         img_size=img_size,
                                         resolution=resolution)
-            if i == 0:
-                # Calculate the optimal aperture from the first image.
-                aper = psfs.optimal_aperture(frame, self.single_pix_noise())
+            aper = psfs.optimal_aperture(frame, self.single_pix_noise())
             signal = np.sum(frame * aper)
             signal_list[i] = signal
         signal = np.mean(signal_list) * self.num_exposures
@@ -515,17 +533,15 @@ if __name__ == '__main__':
 
     mono_tele_v10uvs = Telescope(diam=25, f_num=4.8, psf_type='airy', bandpass=telescope_bandpass)
     b_bandpass = S.ObsBandpass('johnson,b')
-    v_bandpass = S.ObsBandpass('johnson,v')
+    r_bandpass = S.ObsBandpass('johnson,r')
     vis_bandpass = S.UniformTransmission(1.0)
 
     flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
     flat_spec.convert('fnu')
-
+    freqs = np.linspace(1 / 60, 5, 10000)
+    psd = freqs ** 0 * (1.547 / 2.438) ** 2
     tess_geo_obs = Observatory(telescope=mono_tele_v10uvs, sensor=imx455,
-                               filter_bandpass=vis_bandpass, eclip_lat=90,
-                               exposure_time=60, num_exposures=1,
-                               jitter=0.)
-
-    print(tess_geo_obs.psf_fwhm())
+                               filter_bandpass=r_bandpass, eclip_lat=90,
+                               exposure_time=1, num_exposures=3600,
+                               jitter=1, jitter_psd=np.array([freqs, psd]).T)
     print(tess_geo_obs.observe(flat_spec, [0, 0], img_size=15))
-    print(tess_geo_obs.limiting_mag())

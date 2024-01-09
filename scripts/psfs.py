@@ -18,6 +18,7 @@ optimal_aperture : array-like
 
 import numpy as np
 from scipy import special, integrate
+from scipy.signal import fftconvolve
 
 
 # Calculate the energy in a square of dimensionless half-width p
@@ -38,7 +39,7 @@ def airy_ensq_energy(half_width):
         The fraction of the light that hits the square.
     '''
     def ensq_int(theta):
-        """Integrand to calculate the ensquared energy"""
+        '''Integrand to calculate the ensquared energy'''
         return 4/np.pi * (1 - special.jv(0, half_width/np.cos(theta))**2
                             - special.jv(1, half_width/np.cos(theta))**2)
     pix_fraction = integrate.quad(ensq_int, 0, np.pi/4)[0]
@@ -73,7 +74,7 @@ def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
 
 
 def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
-    """Return an x-y grid with a Gaussian disk evaluated at each point.
+    '''Return an x-y grid with a Gaussian disk evaluated at each point.
 
     Parameters
     ----------
@@ -84,9 +85,9 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     pix_size : float
         The size of each pixel in the subarray, in microns.
     mu : array-like
-        The mean of the Gaussian, in pixels.
+        The mean of the Gaussian, in microns.
     Sigma : array-like
-        The covariance matrix of the Gaussian, in pixels.
+        The covariance matrix of the Gaussian, in microns.
 
     Returns
     -------
@@ -94,7 +95,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
         The Gaussian PSF evaluated at each point in the subarray,
         normalized to have a total amplitude of the fractional energy
         ensquared in the subarray.
-    """
+    '''
     grid_points = num_pix * resolution
     x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
     y = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
@@ -117,7 +118,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
 
 
 def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
-    """Return an x-y grid with the Airy disk evaluated at each point.
+    '''Return an x-y grid with the Airy disk evaluated at each point.
 
     Parameters
     ----------
@@ -140,7 +141,7 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
         The Airy disk evaluated at each point in the subarray,
         normalized to have a total amplitude of the fractional energy
         ensquared in the subarray.
-    """
+    '''
     lam /= 10 ** 4
     grid_points = num_pix * resolution
     x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
@@ -160,15 +161,71 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     normalize = subarray_fraction / airy.sum()
     return airy * normalize
 
-
-# Finding the aperture that maximizes the SNR for an image. Uses the
-# algorithm detailed in Tam Nguyen's thesis.
-def optimal_aperture(prf_grid, noise_per_pix):
-    """The optimal aperture for maximizing S/N.
+def moffat_psf(num_pix, resolution, pix_size, mu, alpha, beta):
+    '''Return an x-y grid with a Moffat distribution evaluated at each point.
 
     Parameters
     ----------
-    prf_grid: array-like
+    num_pix : int
+        The number of pixels in the subarray.
+    resolution : int
+        The number of subpixels per pixel in the subarray.
+    pix_size : float
+        The size of each pixel in the subarray, in microns.
+    mu : array-like
+        The mean of the Gaussian, in pixels.
+    alpha: float
+        The width of the Moffat distribution, in microns.
+    beta: float
+        The power of the Moffat distribution.
+
+    Returns
+    -------
+    gaussian : array-like
+        The Gaussian PSF evaluated at each point in the subarray,
+        normalized to have a total amplitude of the fractional energy
+        ensquared in the subarray.
+    '''
+    grid_points = num_pix * resolution
+    x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
+    y = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
+    x, y = np.meshgrid(x, y)
+    pos = np.empty(x.shape + (1,))
+    pos[:, :, 0] = 1 + np.sqrt((x - mu[0]) ** 2 + (y - mu[1]) ** 2) / alpha ** 2
+    arg = (beta - 1) / (np.pi * alpha ** 2) * (1 + pos[:, :, 0]) ** -beta
+    return arg
+    # This isn't done yet--need to do normalization
+
+def jittered_psf(psf_subgrid, pix_jitter, resolution):
+    '''Convolve the jitter profile with the PSF.
+    
+    Parameters
+    ----------
+    psf_subgrid : array-like
+        The PSF subgrid.
+    pix_jitter : float
+        The RMS jitter, in pixels.
+    resolution : int
+        The number of subpixels per pixel in the subgrid.
+    
+    Returns
+    -------
+    jittered_psf : array-like
+        The jittered PSF.
+    '''
+    # Generate a 2D Gaussian array with sigma equal to pix_jitter
+    num_pix = int(psf_subgrid.shape[0] / resolution)
+    jitter_profile = gaussian_psf(num_pix, resolution, 1, [0, 0],
+                                  [[pix_jitter, 0], [0, pix_jitter]])
+    jittered_psf = fftconvolve(psf_subgrid, jitter_profile, mode='same')
+    return jittered_psf
+
+def optimal_aperture(psf_grid, noise_per_pix):
+    '''The optimal aperture for maximizing S/N.
+
+    Parameters
+    ----------
+    psf_grid: array-like
         The signal recorded in each pixel
     noise_per_pix: float
         The noise per pixel, besides source shot noise.
@@ -178,19 +235,19 @@ def optimal_aperture(prf_grid, noise_per_pix):
     aperture_grid: array-like
         A grid of 1s and 0s, where 1s indicate pixels that should be
         included in the optimal aperture.
-    """
+    '''
 
     # Copy the image to a new array so we aren't modifying
     # the original array
-    func_grid = prf_grid.copy()
-    aperture_grid = np.zeros(prf_grid.shape)
+    func_grid = psf_grid.copy()
+    aperture_grid = np.zeros(psf_grid.shape)
     n_aper = 0
     signal = 0
     snr_max = 0
 
     while n_aper <= func_grid.size:
         imax, jmax = np.unravel_index(func_grid.argmax(), func_grid.shape)
-        Nmax = prf_grid[imax, jmax]
+        Nmax = psf_grid[imax, jmax]
         func_grid[imax, jmax] = -1
 
         signal = signal + Nmax
@@ -205,3 +262,34 @@ def optimal_aperture(prf_grid, noise_per_pix):
             break
 
     return aperture_grid
+
+if __name__ == '__main__':
+    # Test the functions
+    import matplotlib.pyplot as plt
+
+    # # Test the Gaussian
+    # gaussian = gaussian_psf(5, 5, 1, [0,0], [[1,0],[0,1]])
+    # fig, ax = plt.subplots()
+    # im = ax.imshow(gaussian)
+    # plt.colorbar(im)
+    # plt.show()
+
+    # Test the Airy
+    airy = airy_disk(10, 10, 1, [0,0], 5, 5000)
+    # Test the jittering
+    jittered = jittered_psf(airy, 0.5, 10)
+
+    # Plot them next to each other
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    im1 = ax1.imshow(np.log(airy))
+    plt.colorbar(im1, ax=ax1)
+    im2 = ax2.imshow(np.log(jittered))
+    plt.colorbar(im2, ax=ax2)
+    plt.show()
+
+    # # Test the Moffat
+    # moffat = moffat_psf(10, 10, 1, [0,0], 5, 12.5)
+    # fig, ax = plt.subplots()
+    # im = ax.imshow(np.log(moffat))
+    # plt.colorbar(im)
+    # plt.show()

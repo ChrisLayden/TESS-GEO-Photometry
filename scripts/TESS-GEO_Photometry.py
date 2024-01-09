@@ -7,6 +7,7 @@ from spectra import *
 from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
 from tkinter import messagebox
+from jitter_tools import integrated_stability
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -114,34 +115,40 @@ class MyGUI:
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
                            'Limiting SNR', 'Ecliptic Latitude (deg)',
-                           'RMS Jitter (arcsec)', 'Jittered Subarray Size (pix)']
+                           'Jitter PSD Type', 'RMS Jitter at 1 Hz (arcsec)',
+                           'PSD Power Law Index','Select Filter']
         self.obs_boxes = []
         self.obs_vars = []
-        for i, value in enumerate(obs_label_names):
-            self.obs_labels.append(tk.Label(self.root, text=value))
+        for i, label_name in enumerate(obs_label_names):
+            self.obs_labels.append(tk.Label(self.root, text=label_name))
             self.obs_labels[i].grid(row=i+15, column=0, padx=padx, pady=pady)
             if i == 4:
-                self.obs_vars.append(tk.DoubleVar())
+                self.obs_vars.append(tk.StringVar())
+                self.obs_boxes.append(tk.OptionMenu(self.root, self.obs_vars[i],
+                                                     'Power Law', 'Fixed Variance'))
+            elif i == 7:
+                self.obs_vars.append(tk.StringVar())
+                self.obs_boxes.append(tk.OptionMenu(self.root, self.obs_vars[i],
+                                         *list(filter_dict.keys())))
             else:
-                self.obs_vars.append(tk.IntVar())
-            self.obs_boxes.append(tk.Entry(self.root, width=10,
-                                           textvariable=self.obs_vars[i]))
+                if i == 1 or i == 6:
+                    self.obs_vars.append(tk.IntVar())
+                else:
+                    self.obs_vars.append(tk.DoubleVar())
+                self.obs_boxes.append(tk.Entry(self.root, width=10,
+                                               textvariable=self.obs_vars[i]))
             self.obs_boxes[i].grid(row=i+15, column=1, padx=padx, pady=pady)
 
-        self.obs_labels.append(tk.Label(self.root, text='Select Filter'))
-        self.obs_vars[0].set(60)
+        self.obs_vars[0].set(60.0)
         self.obs_vars[1].set(1)
-        self.obs_vars[2].set(5)
-        self.obs_vars[3].set(90)
-        self.obs_vars[4].set(0.0)
-        self.obs_vars[5].set(11)
-        self.obs_labels[-1].grid(row=21, column=0, padx=padx, pady=pady)
-        self.filter_options = list(filter_dict.keys())
-        self.filter_default = tk.StringVar()
-        self.filter_default.set('None')
-        self.filter_menu = tk.OptionMenu(self.root, self.filter_default,
-                                         *self.filter_options)
-        self.filter_menu.grid(row=21, column=1, padx=padx, pady=pady)
+        self.obs_vars[2].set(5.0)
+        self.obs_vars[3].set(90.0)
+        self.obs_vars[4].set('Fixed Variance')
+        self.obs_vars[4].trace_add('write', self.gray_if_fixed_rms)
+        self.obs_vars[5].set(0.0)
+        self.obs_vars[6].set(0.0)
+        self.obs_boxes[6].config(state='disabled')
+        self.obs_vars[7].set('None')
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
@@ -254,6 +261,14 @@ class MyGUI:
         else:
             self.tele_boxes[3].config(state='normal')
 
+    def gray_if_fixed_rms(self, *args):
+        '''If the jitter type is set to Fixed RMS, set the power law to 0 and don't let it change.'''
+        if self.obs_vars[4].get() == 'Fixed RMS':
+            self.obs_vars[6].set(0)
+            self.obs_boxes[6].config(state='disabled')
+        else:
+            self.obs_boxes[6].config(state='normal')
+
     def set_tele(self, *args):
         self.tele = telescope_dict[self.tele_default.get()]
         # if self.tele_default.get() == 'Mono Tele V10UVS (UV Coatings)':
@@ -283,14 +298,22 @@ class MyGUI:
         num_exposures = int(self.obs_vars[1].get())
         limiting_snr = self.obs_vars[2].get()
         eclip_angle = self.obs_vars[3].get()
-        filter_bp = filter_dict[self.filter_default.get()]
-        jitter = self.obs_vars[4].get()
+        filter_bp = filter_dict[self.obs_vars[7].get()]
+        jitter = self.obs_vars[5].get()
+        if self.obs_vars[4].get() == 'Power Law':
+            freqs = np.linspace(1 / 60, 5, 10000)
+            amplitudes = 1 / freqs ** self.obs_vars[6].get()
+            one_sigma = integrated_stability(1, freqs, amplitudes)
+            norm_factor = (jitter / one_sigma) ** 2
+            psd = np.array([freqs, norm_factor * amplitudes]).T
+        else:
+            psd = None
         observatory = Observatory(sens, tele, exposure_time=exposure_time,
                                   num_exposures=num_exposures,
                                   limiting_s_n=limiting_snr,
                                   filter_bandpass=filter_bp,
                                   eclip_lat=eclip_angle,
-                                  jitter=jitter)
+                                  jitter=jitter, jitter_psd=psd)
         return observatory
 
     def set_spectrum(self):
@@ -330,8 +353,7 @@ class MyGUI:
         try:
             spectrum = self.set_spectrum()
             observatory = self.set_obs()
-            img_size = self.obs_vars[5].get()
-            results = observatory.observe(spectrum, img_size=img_size)
+            results = observatory.observe(spectrum)
             signal = int(results['signal'])
             noise = int(results['tot_noise'])
             snr = signal / noise
