@@ -271,13 +271,6 @@ class MyGUI:
 
     def set_tele(self, *args):
         self.tele = telescope_dict[self.tele_default.get()]
-        # if self.tele_default.get() == 'Mono Tele V10UVS (UV Coatings)':
-        #     # ~2 times the diffraction limit for f/4.8 and pivot wavelength 275 nm
-        #     self.psf_sigma = 1.15
-        # elif self.tele_default.get() == 'Mono Tele V9UVS (UV Coatings)':
-        #     self.psf_sigma = 1.15
-        if self.tele_default.get() == 'TESS Telescope':
-            self.psf_sigma = 11
         self.tele_vars[0].set(self.tele.diam)
         self.tele_vars[1].set(self.tele.f_num)
         self.tele_vars[2].set(self.tele.psf_type)
@@ -318,9 +311,13 @@ class MyGUI:
 
     def set_spectrum(self):
         if self.flat_spec_bool.get():
-            spectrum = S.FlatSpectrum(fluxdensity=self.flat_spec_mag.get(),
-                                      fluxunits='abmag')
-            spectrum.convert('fnu')
+            abmag = self.flat_spec_mag.get()
+            # Convert to Jansky's; sometimes Pysynphot freaks out when
+            # using AB magnitudes.
+            fluxdensity_Jy = 10 ** (-0.4 * (abmag - 8.90))
+            spectrum = S.FlatSpectrum(fluxdensity=fluxdensity_Jy,
+                                      fluxunits='Jy')
+            # spectrum.convert('fnu')
         elif self.bb_spec_bool.get():
             temp = self.bb_temp.get()
             distance = self.bb_distance.get()

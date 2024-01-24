@@ -5,7 +5,7 @@
 import os
 import pysynphot as S
 import numpy as np
-from observatory import Sensor, Telescope
+from observatory import Observatory, Sensor, Telescope
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -18,7 +18,7 @@ imx455 = Sensor(pix_size=3.76, read_noise=1.65, dark_current=1.5*10**-3,
 
 imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
 imx487 = Sensor(pix_size=2.74, read_noise=2.51, dark_current=5**-4,
-                full_well=100000, qe=imx487_qe)
+                full_well=9662, qe=imx487_qe)
 
 gsense2020_arr = np.genfromtxt(data_folder + 'GSENSE2020_QE.csv', delimiter=',')
 # Multiply the first column by 10 to convert from nm to Angstroms
@@ -46,15 +46,17 @@ imx990_low_gain = Sensor(pix_size=5, read_noise=150, dark_current=47.7,
 imx990 = Sensor(pix_size=5, read_noise=20, dark_current=10,
                 full_well=2000, qe=imx990_qe)
 
-tess_qe = S.FileBandpass(data_folder + 'tess.fits')
+tess_arr = np.genfromtxt(data_folder + 'TESS_throughput.csv', delimiter=',')
+tess_throughput = S.ArrayBandpass(tess_arr[:, 0], tess_arr[:, 1])
 # This dark current is just a place holder; it's negligible anyways
 tesscam = Sensor(pix_size=15, read_noise=10, dark_current=5**-4,
-                 full_well=200000, qe=tess_qe)
+                 full_well=200000, qe=tess_throughput)
 
 sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
                'GSENSE2020 (UV)': gsense2020,
                'TESS CCD': tesscam, 'ULTRASAT CMOS': ultrasat_cmos,
                'IMX 990 (SWIR)': imx990}
+
 
 # Defining telescopes
 v10_bandpass = S.UniformTransmission(0.693)
@@ -83,8 +85,7 @@ mono_tele_v3uv = Telescope(diam=8.5, f_num=3.6, psf_type='gaussian',
 mono_tele_v3swir = Telescope(diam=8.5, f_num=3.6, psf_type='airy', bandpass=v3swir_bandpass)
 
 # Transmission is scaled to give 15,000 e-/s from a mag 10 star
-tess_tele_thru = S.UniformTransmission(0.6315)
-tess_tele = Telescope(diam=10.5, f_num=1.4, psf_type='gaussian', spot_size=22.91, bandpass=tess_tele_thru)
+tess_tele = Telescope(diam=10.5, f_num=1.4, psf_type='gaussian', spot_size=22.91)
 
 telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_uv,
                   'Mono Tele V10UVS (Vis/SWIR Coatings)': mono_tele_v10_vis,
@@ -116,10 +117,29 @@ ultrasat_filt_arr = np.genfromtxt(data_folder + 'ULTRASAT_Filter.csv',
 ultrasat_filter = S.ArrayBandpass(ultrasat_filt_arr[:, 0],
                                   ultrasat_filt_arr[:, 1] / 100)
 
+# Array with uniform total transmission 4000-7000 ang
+vis_wave = np.arange(4000, 7000, 100)
+vis_thru = np.ones(len(vis_wave))
+vis_filt_arr = np.array([vis_wave, vis_thru]).T
+# Pad with zeros
+vis_filt_arr = np.vstack(([3900, 0], vis_filt_arr, [7100, 0]))
+vis_filter = S.ArrayBandpass(vis_filt_arr[:, 0], vis_filt_arr[:, 1])
 
 filter_dict = {'None': no_filter, 'Johnson U': johnson_u,
                'Johnson B': johnson_b, 'Johnson V': johnson_v,
                'Johnson R': johnson_r, 'Johnson I': johnson_i,
                'Johnson J': johnson_j,
                'ULTRASAT': ultrasat_filter,
-               'SWIR (900-1700 nm 100%)': swir_filter}
+               'SWIR (900-1700 nm 100%)': swir_filter,
+               'Visible (400-700 nm 100%)': vis_filter}
+
+# Load tess jitter profile
+tess_jitter = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
+# freqs_tess = np.logspace(-4, 0.5, 1000)
+# psd_tess = np.interp(freqs_tess, tess_jitter[:, 0], tess_jitter[:, 1])
+# tess_jitter = np.array([freqs_tess, psd_tess]).T
+tess_obs = Observatory(telescope=tess_tele, sensor=tesscam, exposure_time=2, num_exposures=1440, jitter_psd=tess_jitter)
+vis_obs = Observatory(telescope=mono_tele_v8_vis, sensor=imx455, exposure_time=2, num_exposures=1440, jitter_psd=tess_jitter)
+spec = S.FlatSpectrum(0.4, fluxunits='Jy')
+print(tess_obs.observe(spec))
+print(vis_obs.observe(spec))

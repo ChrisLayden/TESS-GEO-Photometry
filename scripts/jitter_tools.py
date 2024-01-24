@@ -25,6 +25,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from scipy.fft import fft, ifft, fftfreq
+from scipy.signal import periodogram
 import os
 
 def shift_values(arr, del_x, del_y):
@@ -64,7 +65,7 @@ def jittered_array(arr, duration, jitter_time, resolution, psd=None, pix_jitter=
     resolution : int
         The number of subpixels per pixel in the subgrid.
     psd : array-like (optional)
-        The power spectral density of the jitter, in arcsec^2/Hz.
+        The power spectral density of the jitter, in pix^2/Hz.
         If not specified, the jitter will be white noise.
     pix_jitter : float (optional)
         The RMS jitter of white noise, in pixels. Must be specified
@@ -107,7 +108,6 @@ def jittered_array(arr, duration, jitter_time, resolution, psd=None, pix_jitter=
         raise ValueError("Jitter too large for subarray.")
     # For any displacement that is too large, set it to the maximum allowed.
     displacements[displacements > (img_size / 2)] = img_size / 2
-
     del_x_list = np.rint(np.cos(angles) * displacements).astype(int)
     del_y_list = np.rint(np.sin(angles) * displacements).astype(int)
     avg_arr = np.zeros_like(arr)
@@ -134,10 +134,9 @@ def series_to_psd(time_series, time_step):
     psd_arr : array-like
         The array of power spectral densities.
     '''
-    N = len(time_series)
-    freq_arr = fftfreq(N, time_step)
-    psd_arr = np.abs(fft(time_series)) ** 2
-    return freq_arr, psd_arr
+    f, P = periodogram(time_series, 1 / time_step, 'boxcar', detrend=False)
+    # Only return the positive frequencies
+    return f[1:], P[1:]
 
 # Go from a general PSD to a time sequence
 def psd_to_series(freq_arr, psd_arr):
@@ -157,6 +156,11 @@ def psd_to_series(freq_arr, psd_arr):
     time_series : array-like
         The values at each time step.
     '''
+    # First must make sure that frequency values are equally spaced
+    freq_arr_spaced = np.linspace(np.min(freq_arr), np.max(freq_arr), len(freq_arr))
+    psd_arr_spaced = np.interp(freq_arr_spaced, freq_arr, psd_arr)
+    freq_arr = freq_arr_spaced
+    psd_arr = psd_arr_spaced
     # Get rid of any DC offset
     if freq_arr[0] == 0:
         freq_arr = freq_arr[1:]
@@ -231,14 +235,19 @@ if __name__ == '__main__':
     freqs = np.linspace(1/60, 5, 10000)
     psd = freqs ** -1
     raw_times, time_series = psd_to_series(freqs, psd)
-    times = np.arange(0, 2001, 1)
-    stability = integrated_stability(0.5, freqs, psd)
-    y = np.zeros(len(times) - 1)
-    for i in range(len(times) - 1):
-            y[i] = np.mean(time_series[(raw_times >= times[i]) & (raw_times < times[i+1])])
-    print(np.std(y), stability)
-    print(np.std(time_series), integrated_stability(5, freqs, psd))
-    # freqs2, psd2 = series_to_psd(time_series, times[1] - times[0])
+    # times = np.arange(0, 1001, 1)
+    # stability = integrated_stability(0.5, freqs, psd)
+    # y = np.zeros(len(times) - 1)
+    # for i in range(len(times) - 1):
+    #     y[i] = np.mean(time_series[(raw_times >= times[i]) & (raw_times < times[i+1])])
+    # print(np.std(y), stability)
+    # print(np.std(time_series), integrated_stability(5, freqs, psd))
+    # freqs2, psd2 = series_to_psd(time_series, raw_times[1] - raw_times[0])
+    # plt.scatter(freqs2[1:len(freqs2)//2], psd2[1:len(psd2)//2])
+    # plt.scatter(freqs, psd)
+    # plt.xscale('log')
+    # plt.yscale('log')
+    # plt.show()
     # freqs2 = freqs2[1:len(freqs2)//2]
     # psd2 = psd2[1:len(psd2)//2]
     # stability1 = integrated_stability(10, freqs, psd)
@@ -252,13 +261,13 @@ if __name__ == '__main__':
     # plt.xscale('log')
     # plt.yscale('log')
     # plt.show()
-    
 
-    # # Load TESS jitter data
-    # data_folder = os.path.dirname(__file__) + '/../data/'
-    # tess_data = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
-    # tess_freq = tess_data[:, 0]
-    # tess_psd = tess_data[:, 1]
+    # Load TESS jitter data
+    data_folder = os.path.dirname(__file__) + '/../data/'
+    tess_data = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
+    tess_freq = tess_data[:, 0]
+    tess_psd = tess_data[:, 1]
+    tess_times, tess_time_series = psd_to_series(tess_freq, tess_psd)
     # # Plot the integrated 1-sigma stability vs. frequency
     # tess_stability = np.zeros(len(tess_freq))
     # for i, freq in enumerate(tess_freq):

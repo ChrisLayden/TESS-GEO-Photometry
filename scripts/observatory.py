@@ -86,7 +86,7 @@ class Telescope(object):
         The focal plate scale, in um/arcsec
     '''
     def __init__(self, diam, f_num, psf_type='airy', spot_size=1.0,
-                 bandpass=S.UniformTransmission(1)):
+                 bandpass=S.UniformTransmission(1.0)):
         '''Initializing a telescope object.
 
         Parameters
@@ -120,7 +120,7 @@ class Observatory(object):
     '''Class specifying a complete observatory.'''
 
     def __init__(
-            self, sensor, telescope, filter_bandpass=1,
+            self, sensor, telescope, filter_bandpass=S.UniformTransmission(1.0),
             exposure_time=1., num_exposures=1, eclip_lat=90,
             limiting_s_n=5., jitter=None, jitter_psd=None):
 
@@ -220,10 +220,12 @@ class Observatory(object):
         return bkg_signal
 
     def eff_area(self):
-        '''The effective photometric area of the observatory, in cm^2.'''
+        '''The effective photometric area of the observatory at the pivot wavelength, in cm^2.'''
         tele_area = np.pi * self.telescope.diam ** 2 / 4
-        avg_throughput = self.bandpass.throughput.mean()
-        eff_area = tele_area * avg_throughput
+        pivot_throughput = np.interp(self.lambda_pivot,
+                                     self.bandpass.wave,
+                                     self.bandpass.throughput)
+        eff_area = tele_area * pivot_throughput
         return eff_area
 
     def psf_fwhm(self):
@@ -454,7 +456,7 @@ class Observatory(object):
                                          resolution)).sum(axis=(1, 3))
         # Sample at a high enough rate to get at least 5 jitter
         # steps per exposure, and no slower than every 0.5 s.
-        jitter_time = np.min([self.exposure_time / 5.0, 0.5])
+        jitter_time = np.min([self.exposure_time / 10.0, 0.5])
         avg_grid = jittered_array(initial_grid, self.exposure_time,
                                   jitter_time, resolution=resolution,
                                   psd=jitter_psd_pix, pix_jitter=pix_jitter)
@@ -491,18 +493,52 @@ class Observatory(object):
         
         if self.jitter == 0:
             num_images = 1
-        # Note that for each find the optimal aperture for each individual
-        # frame, rather than finding one aperture and using it for all frames.
-        # This yields the best SNR for the stack, and it's not very
-        # computationally expensive.
+        # # In this method, find the optimal aperture from the first frame,
+        # # then use that aperture for all frames.
+        # signal_list = np.zeros(num_images)
+        # for i in range(num_images):
+        #     frame = self.observed_frame(spectrum, pos=pos,
+        #                                 img_size=img_size,
+        #                                 resolution=resolution)
+        #     if i == 0:
+        #         aper = psfs.optimal_aperture(frame, self.single_pix_noise())
+        #     signal = np.sum(frame * aper)
+        #     signal_list[i] = signal
+        
+        # In this method, convolve the PSF with the jitter profile to get an
+        # optimal aperture.
+        initial_grid = self.signal_grid_fine(spectrum, pos,
+                                             img_size, resolution)
+        if self.jitter_psd is None:
+            jitter_sigma = self.jitter / self.pix_scale
+        else:
+            jitter_time = np.min([self.exposure_time / 10.0, 0.5])
+            jitter_freq = 1 / 2 * jitter_time
+            jitter_sigma = integrated_stability(jitter_freq, self.jitter_psd[:,0], self.jitter_psd[:,1])
+        psf_with_jitter = psfs.jittered_psf(initial_grid, jitter_sigma, resolution=resolution)
+        temp_grid = psf_with_jitter.reshape((11, resolution, 11, resolution))
+        pixel_grid_jitter = temp_grid.sum(axis=(1, 3))
+        aper = psfs.optimal_aperture(pixel_grid_jitter, self.single_pix_noise())
         signal_list = np.zeros(num_images)
         for i in range(num_images):
             frame = self.observed_frame(spectrum, pos=pos,
                                         img_size=img_size,
                                         resolution=resolution)
-            aper = psfs.optimal_aperture(frame, self.single_pix_noise())
             signal = np.sum(frame * aper)
             signal_list[i] = signal
+
+
+        # # In this method, find the optimal aperture for each individual
+        # # frame, rather than finding one aperture and using it for all frames.
+        # signal_list = np.zeros(num_images)
+        # for i in range(num_images):
+        #     frame = self.observed_frame(spectrum, pos=pos,
+        #                                 img_size=img_size,
+        #                                 resolution=resolution)
+        #     aper = psfs.optimal_aperture(frame, self.single_pix_noise())
+        #     signal = np.sum(frame * aper)
+        #     signal_list[i] = signal
+
         signal = np.mean(signal_list) * self.num_exposures
         jitter_noise = np.std(signal_list) * np.sqrt(self.num_exposures)
         shot_noise = np.sqrt(signal)

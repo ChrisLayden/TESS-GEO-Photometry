@@ -110,7 +110,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     arg = np.einsum('...k,kl,...l->...', pos-mu, Sigma_inv, pos-mu)
     # Determine the fraction of the light that hits the entire subarray
     array_p = num_pix / 2 * pix_size
-    subarray_fraction = gaussian_ensq_energy(array_p, Sigma[0][0], Sigma[1][1])
+    subarray_fraction = gaussian_ensq_energy(array_p, np.sqrt(Sigma[0][0]), np.sqrt(Sigma[1][1]))
     # Normalize the PSF to have a total amplitude of subarray_fraction
     gaussian = np.exp(-arg / 2)
     normalize = subarray_fraction / gaussian.sum()
