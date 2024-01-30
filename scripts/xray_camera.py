@@ -51,6 +51,12 @@ def power_law(tot_flux, index, ene_low=100., ene_high=25000.):
     spectral_fluxes = energies ** (-index)
     norm_factor = tot_flux / np.trapz(spectral_fluxes, energies)
     spectral_fluxes *= norm_factor
+    band_500_to_10000 = np.logspace(np.log10(500), np.log10(10000), num=300)
+    energy_500_to_10000 = np.trapz(spectral_fluxes, band_500_to_10000)
+    band_300_to_2000 = np.logspace(np.log10(300), np.log10(2000), num=300)
+    energy_300_to_2000 = np.trapz(spectral_fluxes, band_300_to_2000)
+    print("Flux between 0.5 and 10 keV: ", format(energy_500_to_10000, '3.2e'), " erg/s/cm^2")
+    print("Flux between 0.3 and 2 keV: ", format(energy_300_to_2000, '3.2e'), " erg/s/cm^2")
     # Divide by the photon energy, in erg
     spectral_fluxes = spectral_fluxes / (energies * 1.60218e-12)
     pow_spec = np.array([energies, spectral_fluxes]).T
@@ -115,11 +121,23 @@ def snr(eff_area, open_frac, source_spec, bkg_spec, exposure_time, fov):
     '''
     # Calculate the source flux. First line up the source and effective area energies
     source_spec_interp = np.interp(eff_area[:, 0], source_spec[:, 0], source_spec[:, 1])
-    source_flux = np.trapz(source_spec_interp * eff_area[:, 1], eff_area[:, 0]) # counts/s/cm^2
+    source_flux = np.trapz(source_spec_interp * eff_area[:, 1], eff_area[:, 0]) # counts/s
     bkg_spec_interp = np.interp(eff_area[:, 0], bkg_spec[:, 0], bkg_spec[:, 1])
-    bkg_flux = fov * np.trapz(bkg_spec_interp * eff_area[:, 1], eff_area[:, 0]) # counts/s/cm^2
-    print(source_flux, bkg_flux)
+    bkg_flux = fov * np.trapz(bkg_spec_interp * eff_area[:, 1], eff_area[:, 0]) # counts/s
+    # print(source_flux, bkg_flux)
     snr = source_flux * np.sqrt(exposure_time * open_frac) / np.sqrt(source_flux + open_frac * bkg_flux / (1 - open_frac))
+    return snr
+
+def collimator_snr(eff_area, source_spec, bkg_spec, exposure_time, bkg_fov):
+    # Calculate the source flux. First line up the source and effective area energies
+    source_spec_interp = np.interp(eff_area[:, 0], source_spec[:, 0], source_spec[:, 1])
+    source_flux = np.trapz(source_spec_interp * eff_area[:, 1], eff_area[:, 0]) # counts/s
+    print('Source Flux: ', format(source_flux, '3.2e'), ' counts/s')
+    bkg_spec_interp = np.interp(eff_area[:, 0], bkg_spec[:, 0], bkg_spec[:, 1])
+    bkg_flux = bkg_fov * np.trapz(bkg_spec_interp * eff_area[:, 1], eff_area[:, 0]) # counts/s
+    signal = source_flux * exposure_time
+    noise = np.sqrt(signal + bkg_flux * exposure_time)
+    snr = signal / noise
     return snr
 
 def rel_eff_area_map(mask_size, det_size, height, use_max_angle=True, max_angle=50*np.pi/180, resolution=50, disp_map=False):
@@ -228,29 +246,17 @@ if __name__ == '__main__':
 
     ccid_area = 18.87 # cm^2. Same for CCID-20 and CCID-80
     hete_open_frac = 0.2 # Open fraction of the coded mask
-    tess_geo_open_frac = 0.5
+    tess_geo_open_frac = 0.2
 
     hete_eff_area = copy.copy(ccid20_qe)
-    hete_eff_area[:, 1] *= (hete_open_frac * 2 * ccid_area) # 4 CCIDs, but only half work because of OBF loss
+    hete_eff_area[:, 1] *= (hete_open_frac * 4 * ccid_area) # 4 CCIDs, but only half work because of OBF loss
     tess_geo_eff_area = copy.copy(ccid80_qe)
     tess_geo_eff_area[:, 1] *= (tess_geo_open_frac * 4 * ccid_area) # 8 CCIDs
     swift_eff_area = np.genfromtxt(data_folder + 'SwiftXRT_Aeff.csv', delimiter=',', skip_header=1) # x: eV, y: cm^2
     erosita_eff_area = np.genfromtxt(data_folder + 'eRosita_Aeff.csv', delimiter=',') # x: eV, y: cm^2
-
-    plot_eff_area = False
-    if plot_eff_area:
-        plt.plot(hete_eff_area[:, 0], hete_eff_area[:, 1], label='HETE SXC (r=20%)')
-        plt.plot(tess_geo_eff_area[:, 0], 0.4 * tess_geo_eff_area[:, 1], label='TESS-GEO SXC, r=20%')
-        plt.plot(tess_geo_eff_area[:, 0], tess_geo_eff_area[:, 1], label='TESS-GEO SXC, r=50%')
-        plt.plot(swift_eff_area[:, 0], swift_eff_area[:, 1], label='Swift XRT')
-        # plt.plot(erosita_eff_area[:, 0], erosita_eff_area[:, 1], label='eRosita')
-        # plt.ylim(0.1, 2000)
-        # plt.xlim(100, 2000)
-        # plt.yscale('log')
-        plt.xlabel('Energy (eV)')
-        plt.ylabel('Effective Area (cm^2)')
-        plt.legend()
-        plt.show()
+    nicer_eff_area = np.genfromtxt(data_folder + 'nicer_aeff.csv', delimiter=',') # x: keV, y: cm^2
+    nicer_eff_area[:, 0] *= 1000 # Convert keV to eV
+    nicer_eff_area[:, 1] /= 56 # Consider just one module
 
     eff_fov_10cm = rel_eff_area_map(10, 6.144, 9.5)[2]
     eff_fov_14cm = rel_eff_area_map(14, 6.144, 9.5)[2]
@@ -289,10 +295,17 @@ if __name__ == '__main__':
     bkg_spec[:, 1] /= 1000 # Convert to phot/cm^2/s/eV/sr
     bkg_spec[:, 0] *= 1000 # Convert to eV
 
-    source_spec = power_law(1e-11, 1.4, ene_low=500, ene_high=5000)
-    print(snr(tess_geo_eff_area, 0.5, source_spec, bkg_spec, 3000, 0.001))
+    source_spec = power_law(1.5e-12, 1, ene_low=200, ene_high=20000)
+    collimator_eff_area = copy.copy(ccid80_qe)
+    collimator_throughput = 0.6
+    collimator_eff_area[:, 1] *= (4 * ccid_area * collimator_throughput) # 4 CCIDs
     
 
+    nicer_fov = 2.54 * 10 ** -6
+    four_sq_deg = 0.001218
+    print(collimator_snr(collimator_eff_area, source_spec, bkg_spec, 10000, four_sq_deg / 4))
+
+    
     # # # GRB spectrum. x: E (eV); y: E^2*N(E) (erg/cm^2/s)
     # # grb_spec = np.genfromtxt(data_folder + 'grb_spectrum.csv', delimiter=',', skip_header=1)
     # # # Convert to phot/cm^2/s/eV
@@ -303,4 +316,21 @@ if __name__ == '__main__':
     # # print(grb_num_phot)
     # # grb_flux = np.trapz(grb_spec_interp * energies * 1.60218e-12, energies)
     # # print(grb_flux)
+
+    plot_eff_area = False
+    if plot_eff_area:
+        # plt.plot(hete_eff_area[:, 0], hete_eff_area[:, 1], label='HETE SXC (r=20%)')
+        # plt.plot(tess_geo_eff_area[:, 0], 0.4 * tess_geo_eff_area[:, 1], label='TESS-GEO SXC, r=20%')
+        # plt.plot(tess_geo_eff_area[:, 0], tess_geo_eff_area[:, 1], label='TESS-GEO SXC, r=50%')
+        plt.plot(collimator_eff_area[:, 0], collimator_throughput * collimator_eff_area[:, 1], label='Collimator (4 CCID-80s, 60% throughput)')
+        plt.plot(swift_eff_area[:, 0], swift_eff_area[:, 1], label='Swift XRT')
+        plt.plot(nicer_eff_area[:, 0], nicer_eff_area[:, 1], label='NICER (one module)')
+        # plt.plot(erosita_eff_area[:, 0], erosita_eff_area[:, 1], label='eRosita')
+        # plt.ylim(0.1, 2000)
+        # plt.xlim(100, 2000)
+        # plt.yscale('log')
+        plt.xlabel('Energy (eV)')
+        plt.ylabel('Effective Area (cm^2)')
+        plt.legend()
+        plt.show()
     

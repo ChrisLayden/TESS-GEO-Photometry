@@ -213,6 +213,8 @@ def jittered_psf(psf_subgrid, pix_jitter, resolution):
     jittered_psf : array-like
         The jittered PSF.
     '''
+    if pix_jitter == 0:
+        return psf_subgrid
     # Generate a 2D Gaussian array with sigma equal to pix_jitter
     num_pix = int(psf_subgrid.shape[0] / resolution)
     jitter_profile = gaussian_psf(num_pix, resolution, 1, [0, 0],
@@ -262,6 +264,29 @@ def optimal_aperture(psf_grid, noise_per_pix):
             break
 
     return aperture_grid
+
+def get_aper_padding(aper):
+    '''Calculate the smallest number of zeros to the top, bottom, left, and right of the aperture'''
+    pads = [0, 0, 0, 0]
+    pads_found = [False, False, False, False]
+    img_size = aper.shape[0]
+    for i in range(img_size):
+        # [Top, Bottom, Left, Right]
+        if aper[i, :].sum() != 0:
+            pads[0] = i
+            pads_found[0] = True
+        if aper[img_size - i - 1, :].sum() != 0:
+            pads[1] = i
+            pads_found[1] = True
+        if aper[:, i].sum() != 0:
+            pads[2] = i
+            pads_found[2] = True
+        if aper[:, img_size - i - 1].sum() != 0:
+            pads[3] = i
+            pads_found[3] = True
+        if all(pads_found):
+            break      
+    return pads
 
 if __name__ == '__main__':
     # Test the functions

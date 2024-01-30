@@ -47,21 +47,24 @@ def shift_values(arr, del_x, del_y):
     '''
     N, M = arr.shape
     new_arr = np.zeros_like(arr)
-    new_arr[max(del_x, 0):M+min(del_x, 0), max(del_y, 0):N+min(del_y, 0)] = \
-        arr[-min(del_x, 0):M-max(del_x, 0), -min(del_y, 0):N-max(del_y, 0)]
+    new_arr[max(del_y, 0):M+min(del_y, 0), max(del_x, 0):N+min(del_x, 0)] = \
+        arr[-min(del_y, 0):M-max(del_y, 0), -min(del_x, 0):N-max(del_x, 0)]
     return new_arr
 
-def jittered_array(arr, duration, jitter_time, resolution, psd=None, pix_jitter=None):
+def get_pointings(exposure_time, num_frames, jitter_time, 
+                  img_size, resolution, psd=None, pix_jitter=None):
     '''Jitter the values in an array and take the average array.
 
     Parameters
     ----------
-    arr : array-like
-        The initial intensity grid.
-    duration : float
-        The total duration of the image, in seconds.
+    exposure_time : float
+        The duration of each frame, in seconds.
+    num_exposures : int
+        The number of frames for which to calculate pointings.
     jitter_time : float
         The duration of each jitter step, in seconds.
+    img_size : int
+        The size of the subgrid, in pixels.
     resolution : int
         The number of subpixels per pixel in the subgrid.
     psd : array-like (optional)
@@ -74,45 +77,79 @@ def jittered_array(arr, duration, jitter_time, resolution, psd=None, pix_jitter=
 
     Returns
     -------
-    avg_arr : array-like
-        The final intensity grid.
+    pointings : array-like
+        An array containing the pointings for each frame.
     '''
-    num_steps = int(duration / jitter_time)
-    times = np.linspace(0, duration, num_steps + 1)
-    angles = np.random.uniform(low=0.0, high=2*np.pi, size=num_steps)
+    num_steps_frame = int(exposure_time / jitter_time)
+    tot_time = exposure_time * num_frames
+    tot_steps = num_steps_frame * num_frames
+    times = np.linspace(0, tot_time, tot_steps + 1)
+    jitter_freq = 1 / (2 * jitter_time)
     if psd is not None:
         freqs = psd[:, 0]
         psd_arr = psd[:, 1]
-        jitter_freq = 1 / (2 * jitter_time)
         one_sigma = integrated_stability(jitter_freq, freqs, psd_arr)
-        one_sigma_1Hz = integrated_stability(1, freqs, psd_arr)
-        raw_times, time_series = psd_to_series(freqs, psd_arr)
+        # The duration between time steps in the time series generated
+        # by the PSD
+        psd_time_step = 1 / (2 * np.max(freqs))
+        # Check 2 things with the PSD:
+        # 1. Make sure that the maximum frequency is high enough to
+        #    yield fast enough time steps.
+        # 2. Make sure that the PSD has high enough resolution to yield
+        #    a long enough time series. If resolution is too low, interpolate
+        #    the PSD.
+        if psd_time_step > jitter_time:
+            raise ValueError("PSD maximum frequency too low for jitter time step.")
+        psd_length_required = int(tot_time / psd_time_step / 2 + 1)
+        if len(freqs) < psd_length_required:
+            freqs_new = np.linspace(np.min(freqs), np.max(freqs), psd_length_required)
+            psd_arr = np.interp(freqs_new, freqs, psd_arr)
+            freqs = freqs_new
+        raw_times_x, time_series_x = psd_to_series(freqs, psd_arr)
+        raw_times_y, time_series_y = psd_to_series(freqs, psd_arr)
         # Scale the displacement time series to subpixels, and evaluate
         # at times corresponding to the jitter steps.
-        displacements = np.zeros(num_steps)
-        for i in range(num_steps):
-            displacements[i] = np.mean(time_series[(raw_times >= times[i]) & (raw_times < times[i+1])])
-        displacements *= resolution
+        del_x_list = np.zeros(tot_steps)
+        del_y_list = np.zeros(tot_steps)
+        for i in range(tot_steps):
+            del_x_list[i] = np.mean(time_series_x[(raw_times_x >= times[i]) & (raw_times_x < times[i+1])])
+            del_y_list[i] = np.mean(time_series_y[(raw_times_y >= times[i]) & (raw_times_y < times[i+1])])
+        del_x_list = np.rint(del_x_list * resolution).astype(int)
+        del_y_list = np.rint(del_y_list * resolution).astype(int)
     elif pix_jitter is not None:
         one_sigma = pix_jitter
-        one_sigma_1Hz = pix_jitter
-        displacements = np.random.normal(scale=pix_jitter * resolution,
-                                         size=num_steps)
+        del_x_list = np.rint(np.random.normal(scale=pix_jitter * resolution,
+                                              size=tot_steps)).astype(int)
+        del_y_list = np.rint(np.random.normal(scale=pix_jitter * resolution,
+                                              size=tot_steps)).astype(int)
     else:
         raise ValueError("Must specify either jitter PSD or pix_jitter.")
-    # Return error if jitter is too large for the subgrid.
-    # Do this if 2.5*sigma is greater than half the subgrid size.
-    # This criterion corresponds to 1% of positions being outside the subgrid.
-    img_size = float(arr.shape[0])
-    if (2.5 * one_sigma * resolution) > (img_size / 2):
+    if (2.5 * one_sigma) > (img_size / 2):
         raise ValueError("Jitter too large for subarray.")
-    # For any displacement that is too large, set it to the maximum allowed.
-    displacements[displacements > (img_size / 2)] = img_size / 2
-    del_x_list = np.rint(np.cos(angles) * displacements).astype(int)
-    del_y_list = np.rint(np.sin(angles) * displacements).astype(int)
+    pointings = np.array(list(zip(del_x_list, del_y_list)))
+    # Reshape the pointings so each row corresponds to a frame
+    pointings_array = pointings.reshape((num_frames, num_steps_frame, 2))
+    return pointings_array
+
+def jittered_array(arr, pointings):
+    '''Jitter the values in an array and take the average array.
+
+    Parameters
+    ----------
+    arr : array-like
+        The initial intensity grid.
+    pointings : array-like
+        An array containing the pointings for each frame.
+
+    Returns
+    -------
+    avg_arr : array-like
+        The final intensity grid.
+    '''
+    num_steps = pointings.shape[0]
     avg_arr = np.zeros_like(arr)
     for i in range(num_steps):
-        shifted_arr = shift_values(arr, del_x_list[i], del_y_list[i])
+        shifted_arr = shift_values(arr, pointings[i, 0], pointings[i, 1])
         avg_arr += shifted_arr
     avg_arr /= num_steps
     return avg_arr
@@ -232,35 +269,14 @@ def integrated_stability(freq, freq_arr, psd_arr, sigma_level=1):
 if __name__ == '__main__':
     # Check that the PSD to time series function works by taking
     # the PSD of the series
-    freqs = np.linspace(1/60, 5, 10000)
+    freqs = np.linspace(1/60, 5, 100000)
     psd = freqs ** -1
+    import time
+    start = time.time()
     raw_times, time_series = psd_to_series(freqs, psd)
-    # times = np.arange(0, 1001, 1)
-    # stability = integrated_stability(0.5, freqs, psd)
-    # y = np.zeros(len(times) - 1)
-    # for i in range(len(times) - 1):
-    #     y[i] = np.mean(time_series[(raw_times >= times[i]) & (raw_times < times[i+1])])
-    # print(np.std(y), stability)
-    # print(np.std(time_series), integrated_stability(5, freqs, psd))
-    # freqs2, psd2 = series_to_psd(time_series, raw_times[1] - raw_times[0])
-    # plt.scatter(freqs2[1:len(freqs2)//2], psd2[1:len(psd2)//2])
-    # plt.scatter(freqs, psd)
-    # plt.xscale('log')
-    # plt.yscale('log')
-    # plt.show()
-    # freqs2 = freqs2[1:len(freqs2)//2]
-    # psd2 = psd2[1:len(psd2)//2]
-    # stability1 = integrated_stability(10, freqs, psd)
-    # stability2 = integrated_stability(10, freqs2, psd2)
-    # print(stability1, stability2)
-    # # Plot the stability vs. frequency
-    # stability = np.zeros(len(freqs))
-    # for i, freq in enumerate(freqs):
-    #     stability[i] = integrated_stability(freq, freqs, psd)
-    # plt.plot(freqs, stability)
-    # plt.xscale('log')
-    # plt.yscale('log')
-    # plt.show()
+    end = time.time()
+    print(end - start)
+    
 
     # Load TESS jitter data
     data_folder = os.path.dirname(__file__) + '/../data/'

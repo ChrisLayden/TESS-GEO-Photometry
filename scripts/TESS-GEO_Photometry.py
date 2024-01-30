@@ -116,7 +116,7 @@ class MyGUI:
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
                            'Limiting SNR', 'Ecliptic Latitude (deg)',
                            'Jitter PSD Type', 'RMS Jitter at 1 Hz (arcsec)',
-                           'PSD Power Law Index','Select Filter']
+                           'PSD Power Law Index', 'Subarray Size', 'Select Filter']
         self.obs_boxes = []
         self.obs_vars = []
         for i, label_name in enumerate(obs_label_names):
@@ -126,12 +126,12 @@ class MyGUI:
                 self.obs_vars.append(tk.StringVar())
                 self.obs_boxes.append(tk.OptionMenu(self.root, self.obs_vars[i],
                                                      'Power Law', 'Fixed Variance'))
-            elif i == 7:
+            elif i == 8:
                 self.obs_vars.append(tk.StringVar())
                 self.obs_boxes.append(tk.OptionMenu(self.root, self.obs_vars[i],
                                          *list(filter_dict.keys())))
             else:
-                if i == 1 or i == 6:
+                if i == 1 or i == 6 or i == 7:
                     self.obs_vars.append(tk.IntVar())
                 else:
                     self.obs_vars.append(tk.DoubleVar())
@@ -148,7 +148,8 @@ class MyGUI:
         self.obs_vars[5].set(0.0)
         self.obs_vars[6].set(0.0)
         self.obs_boxes[6].config(state='disabled')
-        self.obs_vars[7].set('None')
+        self.obs_vars[7].set(11)
+        self.obs_vars[8].set('None')
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
@@ -291,12 +292,13 @@ class MyGUI:
         num_exposures = int(self.obs_vars[1].get())
         limiting_snr = self.obs_vars[2].get()
         eclip_angle = self.obs_vars[3].get()
-        filter_bp = filter_dict[self.obs_vars[7].get()]
+        filter_bp = filter_dict[self.obs_vars[8].get()]
         jitter = self.obs_vars[5].get()
         if self.obs_vars[4].get() == 'Power Law':
             freqs = np.linspace(1 / 60, 5, 10000)
             amplitudes = 1 / freqs ** self.obs_vars[6].get()
             one_sigma = integrated_stability(1, freqs, amplitudes)
+
             norm_factor = (jitter / one_sigma) ** 2
             psd = np.array([freqs, norm_factor * amplitudes]).T
         else:
@@ -350,7 +352,8 @@ class MyGUI:
         try:
             spectrum = self.set_spectrum()
             observatory = self.set_obs()
-            results = observatory.observe(spectrum)
+            img_size = self.obs_vars[7].get()
+            results = observatory.observe(spectrum, num_frames=100, img_size=img_size)
             signal = int(results['signal'])
             noise = int(results['tot_noise'])
             snr = signal / noise

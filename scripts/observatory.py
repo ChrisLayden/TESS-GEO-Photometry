@@ -21,7 +21,7 @@ import psfs
 import numpy as np
 import pysynphot as S
 from sky_background import bkg_spectrum
-from jitter_tools import jittered_array, integrated_stability
+from jitter_tools import jittered_array, integrated_stability, get_pointings, shift_values
 
 
 class Sensor(object):
@@ -144,11 +144,13 @@ class Observatory(object):
             The signal-to-noise ratio constituting a detection.
         jitter: float
             The 1-sigma jitter of the telescope, in arcseconds.
-            Assumes jitter with a fixed variance at any timescale.
+            Basically assumes zero power beyond the frequency
+            at which jitter is calculated.
             Either this or jitter_psd must be specified, and
             jitter_psd takes precedence.
         jitter_psd: array-like (n x 2)
-            The power spectral density of the jitter.
+            The power spectral density of the jitter. Assumes PSD is
+            the same for x and y directions, and no roll jitter.
             Contains two columns: the first is the frequency, in Hz, and
             the second is the PSD, in arcseconds^2/Hz.
         '''
@@ -264,7 +266,7 @@ class Observatory(object):
         return signal
 
     def single_pix_noise(self):
-        '''The noise from the background and sensor, in e-/pix.'''
+        '''The noise from the background and sensor in one exposure, in e-/pix.'''
         # Noise from sensor dark current
         dark_current_noise = np.sqrt(self.sensor.dark_current *
                                      self.exposure_time)
@@ -395,7 +397,7 @@ class Observatory(object):
                                       self.lambda_pivot)
         intensity_grid = psf_grid * tot_signal
         return intensity_grid
-
+    
     def signal_grid(self, spectrum, pos=np.array([0, 0]),
                     img_size=11, resolution=11):
         '''The signal (in electrons) in each pixel for a small sensor region.
@@ -419,14 +421,16 @@ class Observatory(object):
         pixel_grid = temp_grid.sum(axis=(1, 3))
         return pixel_grid
 
-    def observed_frame(self, spectrum, pos=np.array([0, 0]),
-                       img_size=11, resolution=11):
+    def observed_frame(self, spectrum, pointings,
+                       pos=np.array([0, 0]), img_size=11, resolution=11):
         '''An actual observed frame, with simulated pointing jitter.
 
         Parameters
         ----------
         spectrum: pysynphot.spectrum object
             The spectrum for which to calculate the intensity grid.
+        pointings: array-like
+            List of pointing offsets, in subpixels.
         pos: array-like (default [0, 0])
             The centroid position of the source on the subarray, in
             microns, with [0,0] representing the center of the
@@ -441,31 +445,15 @@ class Observatory(object):
         image : array-like
             The observed image.
         '''
-        if self.jitter_psd is not None:
-            # Convert the PSD values in self.jitter_psd to pixels^2/Hz
-            jitter_psd_pix = self.jitter_psd.copy()
-            jitter_psd_pix[:, 1] = jitter_psd_pix[:, 1] / self.pix_scale ** 2
-            pix_jitter = None
-        else:
-            pix_jitter = self.jitter / self.pix_scale
-            jitter_psd_pix = None
         initial_grid = self.signal_grid_fine(spectrum, pos,
                                              img_size, resolution)
-        if self.jitter == 0 and self.jitter_psd is None:
-            return initial_grid.reshape((img_size, resolution, img_size,
-                                         resolution)).sum(axis=(1, 3))
-        # Sample at a high enough rate to get at least 5 jitter
-        # steps per exposure, and no slower than every 0.5 s.
-        jitter_time = np.min([self.exposure_time / 10.0, 0.5])
-        avg_grid = jittered_array(initial_grid, self.exposure_time,
-                                  jitter_time, resolution=resolution,
-                                  psd=jitter_psd_pix, pix_jitter=pix_jitter)
+        avg_grid = jittered_array(initial_grid, pointings)
         frame = avg_grid.reshape((img_size, resolution, img_size,
                                   resolution)).sum(axis=(1, 3))
         return frame
 
-    def observe(self, spectrum, pos=np.array([0, 0]), num_images=100,
-                img_size=11, resolution=11):
+    def observe(self, spectrum, pos=np.array([0, 0]), num_frames=100,
+                img_size=11, resolution=11, aper_method='shift_and_add'):
         ''' Monte Carlo estimate of the signal and noise for a spectrum.
 
         Parameters
@@ -478,12 +466,19 @@ class Observatory(object):
             central pixel.
         jitter : float
             The RMS jitter, in pixels. Assumes fixed RMS.
-        num_images : int (default 100)
-            The number of images to simulate.
+        num_frames : int (default 100)
+            The number of frames to simulate with jitter.
         img_size: int (default 11)
             The extent of the subarray, in pixels.
         resolution: int (default 11)
             The number of sub-pixels per pixel.
+        aper_method: string (default 'shift_and_add')
+            The method for determining the optimal aperture.
+            Options are 'conv_psf' (convolve the PSF with the jitter
+            profile to get an optimal aperture) and 'indiv_aper'
+            (find the optimal aperture for each individual frame,
+            rather than finding one aperture and using it for all
+            frames).
 
         Returns
         -------
@@ -492,52 +487,79 @@ class Observatory(object):
         '''
         
         if self.jitter == 0:
-            num_images = 1
-        # # In this method, find the optimal aperture from the first frame,
-        # # then use that aperture for all frames.
-        # signal_list = np.zeros(num_images)
-        # for i in range(num_images):
-        #     frame = self.observed_frame(spectrum, pos=pos,
-        #                                 img_size=img_size,
-        #                                 resolution=resolution)
-        #     if i == 0:
-        #         aper = psfs.optimal_aperture(frame, self.single_pix_noise())
-        #     signal = np.sum(frame * aper)
-        #     signal_list[i] = signal
-        
-        # In this method, convolve the PSF with the jitter profile to get an
-        # optimal aperture.
-        initial_grid = self.signal_grid_fine(spectrum, pos,
-                                             img_size, resolution)
-        if self.jitter_psd is None:
-            jitter_sigma = self.jitter / self.pix_scale
+            num_frames = 1
+        jitter_pix = self.jitter / self.pix_scale if self.jitter is not None else None
+        if self.jitter_psd is not None:
+            jitter_psd_pix = self.jitter_psd.copy()
+            jitter_psd_pix[:, 1] = jitter_psd_pix[:, 1] / self.pix_scale ** 2
         else:
-            jitter_time = np.min([self.exposure_time / 10.0, 0.5])
-            jitter_freq = 1 / 2 * jitter_time
-            jitter_sigma = integrated_stability(jitter_freq, self.jitter_psd[:,0], self.jitter_psd[:,1])
-        psf_with_jitter = psfs.jittered_psf(initial_grid, jitter_sigma, resolution=resolution)
-        temp_grid = psf_with_jitter.reshape((11, resolution, 11, resolution))
-        pixel_grid_jitter = temp_grid.sum(axis=(1, 3))
-        aper = psfs.optimal_aperture(pixel_grid_jitter, self.single_pix_noise())
-        signal_list = np.zeros(num_images)
-        for i in range(num_images):
-            frame = self.observed_frame(spectrum, pos=pos,
-                                        img_size=img_size,
-                                        resolution=resolution)
-            signal = np.sum(frame * aper)
-            signal_list[i] = signal
+            jitter_psd_pix = None
+        pointings_array = get_pointings(self.exposure_time, num_frames, self.exposure_time / 9.0,
+                                        img_size, resolution, jitter_psd_pix, jitter_pix)
+        signal_list = np.zeros(num_frames)
+        
+        if aper_method == 'conv_psf':
+            initial_grid = self.signal_grid_fine(spectrum, pos,
+                                                img_size, resolution)
+            if self.jitter_psd is None:
+                jitter_sigma = self.jitter / self.pix_scale
+            else:
+                jitter_time = np.min([self.exposure_time / 9.0, 0.5])
+                jitter_freq = 1 / 2 * jitter_time
+                jitter_sigma = integrated_stability(jitter_freq, self.jitter_psd[:,0], self.jitter_psd[:,1])
+            psf_with_jitter = psfs.jittered_psf(initial_grid, jitter_sigma, resolution=resolution)
+            temp_grid = psf_with_jitter.reshape((img_size, resolution, img_size, resolution))
+            pixel_grid_jitter = temp_grid.sum(axis=(1, 3))
+            aper = psfs.optimal_aperture(pixel_grid_jitter, self.single_pix_noise())
+            for i in range(num_frames):
+                pointings = pointings_array[i]
+                frame = self.observed_frame(spectrum, pointings, pos=pos,
+                                            img_size=img_size,
+                                            resolution=resolution)
+                signal = np.sum(frame * aper)
+                signal_list[i] = signal
+        elif aper_method == 'shift_and_add':
+            if self.jitter_psd is None:
+                jitter_sigma = self.jitter / self.pix_scale
+            else:
+                jitter_time = np.min([self.exposure_time / 9.0, 0.5])
+                jitter_freq = 1 / (2 * jitter_time)
+                jitter_sigma = integrated_stability(jitter_freq, jitter_psd_pix[:,0], jitter_psd_pix[:,1])
+            initial_grid = self.signal_grid_fine(spectrum, pos,
+                                                 img_size, resolution)
+            image_grid = initial_grid * self.num_exposures
+            image_noise = self.single_pix_noise() * np.sqrt(self.num_exposures)
+            psf_with_jitter = psfs.jittered_psf(image_grid, jitter_sigma, resolution=resolution)
+            temp_grid = psf_with_jitter.reshape((img_size, resolution, img_size, resolution))
+            pixel_grid_jitter = temp_grid.sum(axis=(1, 3))
+            raw_aper = psfs.optimal_aperture(pixel_grid_jitter, image_noise)
+            aper_pads = psfs.get_aper_padding(raw_aper)
+            for i in range(num_frames):
+                pointings = pointings_array[i]
+                del_x = np.mean(pointings[:,0]) / 11
+                del_y = np.mean(pointings[:,1]) / 11
+                del_x_int = np.rint(np.mean(pointings[:,0]) / 11).astype(int)
+                del_y_int = np.rint(np.mean(pointings[:,1]) / 11).astype(int)
+                if del_y_int < -aper_pads[0] or del_y_int > aper_pads[1]:
+                    raise ValueError('Subarry size too small for jitter.')
+                if del_x_int < -aper_pads[2] or del_x_int > aper_pads[3]:
+                    raise ValueError('Subarry size too small for jitter.')
+                frame = self.observed_frame(spectrum, pointings, pos=pos,
+                                            img_size=img_size,
+                                            resolution=resolution)
+                aper = shift_values(raw_aper, del_x_int, del_y_int)
+                signal = np.sum(frame * aper)
+                signal_list[i] = signal
 
-
-        # # In this method, find the optimal aperture for each individual
-        # # frame, rather than finding one aperture and using it for all frames.
-        # signal_list = np.zeros(num_images)
-        # for i in range(num_images):
-        #     frame = self.observed_frame(spectrum, pos=pos,
-        #                                 img_size=img_size,
-        #                                 resolution=resolution)
-        #     aper = psfs.optimal_aperture(frame, self.single_pix_noise())
-        #     signal = np.sum(frame * aper)
-        #     signal_list[i] = signal
+        # import matplotlib.pyplot as plt
+        # fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+        # fig.set_size_inches(10, 5)
+        # ax1.plot(signal_list)
+        # # ax2.plot(offset_list)
+        # ax2.plot(del_x_list)
+        # ax3.plot(del_y_list)
+        # # ax2.plot(aper_count_list)
+        # plt.show()
 
         signal = np.mean(signal_list) * self.num_exposures
         jitter_noise = np.std(signal_list) * np.sqrt(self.num_exposures)
@@ -580,4 +602,3 @@ if __name__ == '__main__':
                                filter_bandpass=r_bandpass, eclip_lat=90,
                                exposure_time=1, num_exposures=3600,
                                jitter=1, jitter_psd=np.array([freqs, psd]).T)
-    print(tess_geo_obs.observe(flat_spec, [0, 0], img_size=15))
