@@ -52,7 +52,7 @@ def shift_values(arr, del_x, del_y):
     return new_arr
 
 def get_pointings(exposure_time, num_frames, jitter_time, 
-                  img_size, resolution, psd=None, pix_jitter=None):
+                  resolution, psd=None, pix_jitter=None):
     '''Jitter the values in an array and take the average array.
 
     Parameters
@@ -63,8 +63,6 @@ def get_pointings(exposure_time, num_frames, jitter_time,
         The number of frames for which to calculate pointings.
     jitter_time : float
         The duration of each jitter step, in seconds.
-    img_size : int
-        The size of the subgrid, in pixels.
     resolution : int
         The number of subpixels per pixel in the subgrid.
     psd : array-like (optional)
@@ -105,15 +103,18 @@ def get_pointings(exposure_time, num_frames, jitter_time,
             freqs_new = np.linspace(np.min(freqs), np.max(freqs), psd_length_required)
             psd_arr = np.interp(freqs_new, freqs, psd_arr)
             freqs = freqs_new
+        np.random.seed(1)
         raw_times_x, time_series_x = psd_to_series(freqs, psd_arr)
         raw_times_y, time_series_y = psd_to_series(freqs, psd_arr)
-        # Scale the displacement time series to subpixels, and evaluate
-        # at times corresponding to the jitter steps.
+        # time_series_x *= 0
+        # time_series_y *= 0
+        # Evaluate at times corresponding to the jitter steps.
         del_x_list = np.zeros(tot_steps)
         del_y_list = np.zeros(tot_steps)
         for i in range(tot_steps):
             del_x_list[i] = np.mean(time_series_x[(raw_times_x >= times[i]) & (raw_times_x < times[i+1])])
             del_y_list[i] = np.mean(time_series_y[(raw_times_y >= times[i]) & (raw_times_y < times[i+1])])
+       # Scale the displacement time series to subpixels
         del_x_list = np.rint(del_x_list * resolution).astype(int)
         del_y_list = np.rint(del_y_list * resolution).astype(int)
     elif pix_jitter is not None:
@@ -124,8 +125,6 @@ def get_pointings(exposure_time, num_frames, jitter_time,
                                               size=tot_steps)).astype(int)
     else:
         raise ValueError("Must specify either jitter PSD or pix_jitter.")
-    if (2.5 * one_sigma) > (img_size / 2):
-        raise ValueError("Jitter too large for subarray.")
     pointings = np.array(list(zip(del_x_list, del_y_list)))
     # Reshape the pointings so each row corresponds to a frame
     pointings_array = pointings.reshape((num_frames, num_steps_frame, 2))

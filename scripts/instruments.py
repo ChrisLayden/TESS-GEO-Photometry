@@ -134,13 +134,13 @@ filter_dict = {'None': no_filter, 'Johnson U': johnson_u,
                'Visible (400-700 nm 100%)': vis_filter}
 
 # Load tess jitter profile
-tess_jitter = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
+tess_psd = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
 # freqs_tess = np.logspace(-4, 0.5, 1000)
 # psd_tess = np.interp(freqs_tess, tess_jitter[:, 0], tess_jitter[:, 1])
 # tess_jitter = np.array([freqs_tess, psd_tess]).T
-tess_obs = Observatory(telescope=tess_tele, sensor=tesscam, exposure_time=2, num_exposures=1440, jitter_psd=tess_jitter)
+tess_obs = Observatory(telescope=tess_tele, sensor=tesscam, exposure_time=2, num_exposures=1440, jitter_psd=tess_psd)
 from jitter_tools import integrated_stability
-freqs = np.linspace(1 / 60, 5, 10000)
+freqs = np.linspace(1 / 60, 20, 10000)
 amplitudes = 1 / freqs ** 2
 jitter = 1.0
 one_sigma = integrated_stability(1, freqs, amplitudes)
@@ -148,6 +148,9 @@ norm_factor = (jitter / one_sigma) ** 2
 psd = np.array([freqs, norm_factor * amplitudes]).T
 vis_obs = Observatory(telescope=mono_tele_v10_vis, sensor=imx455, exposure_time=2, num_exposures=1800, jitter_psd=psd, filter_bandpass=johnson_r)
 spec = S.FlatSpectrum(0.3631, fluxunits='Jy')
-print(tess_obs.observe(spec, aper_method='shift_and_add', num_frames=300))
-# print(vis_obs.observe(spec, aper_method='shift_and_add', num_frames=300, img_size=15))
+# print(tess_obs.observe(spec, num_frames=300))
+import time
+start = time.time()
+print(vis_obs.observe(spec, num_frames=300, img_size=19, resolution=11))
+print(time.time() - start)
 # print(vis_obs.observe(spec, aper_method='indiv_aper', num_frames=300, img_size=11))

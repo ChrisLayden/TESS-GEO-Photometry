@@ -288,6 +288,18 @@ def get_aper_padding(aper):
             break      
     return pads
 
+def expand_aper(aper):
+    '''Expand the aperture by one pixel'''
+    # Wherever there is a zero in aper, if there is an adjacent one, make it a one
+    new_aper = aper.copy()
+    for i in range(1, aper.shape[0] - 1):
+        for j in range(1, aper.shape[1] - 1):
+            if aper[i, j] == 0:
+                ones_to_check = [aper[i - 1, j], aper[i + 1, j], aper[i, j - 1], aper[i, j + 1], aper[i - 1, j - 1], aper[i - 1, j + 1], aper[i + 1, j - 1], aper[i + 1, j + 1]]
+                if 1 in ones_to_check:
+                    new_aper[i, j] = 1
+    return new_aper
+
 if __name__ == '__main__':
     # Test the functions
     import matplotlib.pyplot as plt
