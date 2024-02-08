@@ -73,7 +73,7 @@ def gaussian_ensq_energy(half_width, sigma_x, sigma_y):
     return pix_fraction
 
 
-def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
+def gaussian_psf(num_pix, resolution, pix_size, mu, sigma):
     '''Return an x-y grid with a Gaussian disk evaluated at each point.
 
     Parameters
@@ -104,13 +104,13 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, Sigma):
     pos[:, :, 0] = x
     pos[:, :, 1] = y
 
-    Sigma_inv = np.linalg.inv(Sigma)
+    sigma_inv = np.linalg.inv(sigma)
     # This einsum call calculates (x-mu)T.Sigma-1.(x-mu) in a vectorized
     # way across all the input variables.
-    arg = np.einsum('...k,kl,...l->...', pos-mu, Sigma_inv, pos-mu)
+    arg = np.einsum('...k,kl,...l->...', pos-mu, sigma_inv, pos-mu)
     # Determine the fraction of the light that hits the entire subarray
     array_p = num_pix / 2 * pix_size
-    subarray_fraction = gaussian_ensq_energy(array_p, np.sqrt(Sigma[0][0]), np.sqrt(Sigma[1][1]))
+    subarray_fraction = gaussian_ensq_energy(array_p, np.sqrt(sigma[0][0]), np.sqrt(sigma[1][1]))
     # Normalize the PSF to have a total amplitude of subarray_fraction
     gaussian = np.exp(-arg / 2)
     normalize = subarray_fraction / gaussian.sum()
@@ -196,7 +196,7 @@ def moffat_psf(num_pix, resolution, pix_size, mu, alpha, beta):
     return arg
     # This isn't done yet--need to do normalization
 
-def jittered_psf(psf_subgrid, pix_jitter, resolution):
+def get_jittered_psf(psf_subgrid, pix_jitter, resolution):
     '''Convolve the jitter profile with the PSF.
     
     Parameters
@@ -219,10 +219,9 @@ def jittered_psf(psf_subgrid, pix_jitter, resolution):
     num_pix = int(psf_subgrid.shape[0] / resolution)
     jitter_profile = gaussian_psf(num_pix, resolution, 1, [0, 0],
                                   [[pix_jitter, 0], [0, pix_jitter]])
-    jittered_psf = fftconvolve(psf_subgrid, jitter_profile, mode='same')
-    return jittered_psf
+    return fftconvolve(psf_subgrid, jitter_profile, mode='same')
 
-def optimal_aperture(psf_grid, noise_per_pix):
+def get_optimal_aperture(psf_grid, noise_per_pix):
     '''The optimal aperture for maximizing S/N.
 
     Parameters
@@ -235,7 +234,7 @@ def optimal_aperture(psf_grid, noise_per_pix):
     Returns
     -------
     aperture_grid: array-like
-        A grid of 1s and 0s, where 1s indicate pixels that should be
+        A grid of 1s and 0s, where 1s indicate pixels that are
         included in the optimal aperture.
     '''
 
@@ -249,10 +248,9 @@ def optimal_aperture(psf_grid, noise_per_pix):
 
     while n_aper <= func_grid.size:
         imax, jmax = np.unravel_index(func_grid.argmax(), func_grid.shape)
-        Nmax = psf_grid[imax, jmax]
+        max_sig_remaining = psf_grid[imax, jmax]
         func_grid[imax, jmax] = -1
-
-        signal = signal + Nmax
+        signal = signal + max_sig_remaining
         noise = np.sqrt(signal + ((n_aper + 1) * noise_per_pix) ** 2)
         snr = signal / noise
 
@@ -285,20 +283,8 @@ def get_aper_padding(aper):
             pads[3] = i
             pads_found[3] = True
         if all(pads_found):
-            break      
+            break
     return pads
-
-def expand_aper(aper):
-    '''Expand the aperture by one pixel'''
-    # Wherever there is a zero in aper, if there is an adjacent one, make it a one
-    new_aper = aper.copy()
-    for i in range(1, aper.shape[0] - 1):
-        for j in range(1, aper.shape[1] - 1):
-            if aper[i, j] == 0:
-                ones_to_check = [aper[i - 1, j], aper[i + 1, j], aper[i, j - 1], aper[i, j + 1], aper[i - 1, j - 1], aper[i - 1, j + 1], aper[i + 1, j - 1], aper[i + 1, j + 1]]
-                if 1 in ones_to_check:
-                    new_aper[i, j] = 1
-    return new_aper
 
 if __name__ == '__main__':
     # Test the functions
@@ -312,15 +298,15 @@ if __name__ == '__main__':
     # plt.show()
 
     # Test the Airy
-    airy = airy_disk(10, 10, 1, [0,0], 5, 5000)
+    airy_psf = airy_disk(10, 10, 1, [0,0], 5, 5000)
     # Test the jittering
-    jittered = jittered_psf(airy, 0.5, 10)
+    jittered_psf = get_jittered_psf(airy_psf, 0.5, 10)
 
     # Plot them next to each other
     fig, (ax1, ax2) = plt.subplots(1, 2)
-    im1 = ax1.imshow(np.log(airy))
+    im1 = ax1.imshow(np.log(airy_psf))
     plt.colorbar(im1, ax=ax1)
-    im2 = ax2.imshow(np.log(jittered))
+    im2 = ax2.imshow(np.log(jittered_psf))
     plt.colorbar(im2, ax=ax2)
     plt.show()
 

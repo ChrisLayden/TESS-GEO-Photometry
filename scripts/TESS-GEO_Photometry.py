@@ -3,6 +3,7 @@
 import os
 import tkinter as tk
 import pysynphot as S
+import numpy as np
 from spectra import *
 from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
@@ -33,7 +34,7 @@ class MyGUI:
                             'Full Well Capacity']
         self.sens_boxes = []
         self.sens_vars = []
-        for i in range(len(sens_label_names)):
+        for i in enumerate(sens_label_names):
             self.sens_labels.append(tk.Label(self.root,
                                              text=sens_label_names[i]))
             self.sens_labels[i].grid(row=i+2, column=0, padx=padx, pady=pady)
@@ -60,6 +61,8 @@ class MyGUI:
         self.sens_menu.grid(row=1, column=1, columnspan=1, padx=padx,
                             pady=pady)
         self.sens_default.trace_add('write', self.set_sens)
+        for var in self.sens_vars:
+            var.trace_add('write', self.clear_results)
 
         # Defining telescope properties
         self.tele_header = tk.Label(self.root, text='Telescope Properties',
@@ -67,10 +70,12 @@ class MyGUI:
         self.tele_header.grid(row=7, column=0, columnspan=2, padx=padx,
                               pady=pady)
         self.tele_labels = []
-        tele_label_names = ['Diameter (cm)', 'F/number', 'PSF Type', 'Spot Size FWHM (times diffraction limit)', 'Bandpass']
+        tele_label_names = ['Diameter (cm)', 'F/number', 'PSF Type',
+                            'Spot Size FWHM (times diffraction limit)',
+                            'Bandpass']
         self.tele_boxes = []
         self.tele_vars = []
-        for i in range(len(tele_label_names)):
+        for i in enumerate(tele_label_names):
             self.tele_labels.append(tk.Label(self.root,
                                              text=tele_label_names[i]))
             self.tele_labels[i].grid(row=i+9, column=0, padx=padx, pady=pady)
@@ -106,6 +111,9 @@ class MyGUI:
         self.tele_menu.grid(row=8, column=1, columnspan=1, padx=padx,
                             pady=pady)
         self.tele_default.trace_add('write', self.set_tele)
+        for var in self.tele_vars:
+            var.trace_add('write', self.clear_results)
+
         # Defining observing properties
         self.obs_header = tk.Label(self.root, text='Observing Properties',
                                    font=['Arial', 16, 'bold'])
@@ -150,6 +158,8 @@ class MyGUI:
         self.obs_boxes[6].config(state='disabled')
         self.obs_vars[7].set(11)
         self.obs_vars[8].set('None')
+        for var in self.obs_vars:
+            var.trace_add('write', self.clear_results)
 
         # Initializing labels that display results
         self.results_header = tk.Label(self.root, text='General Results',
@@ -244,6 +254,12 @@ class MyGUI:
 
         self.root.mainloop()
 
+    def clear_results(self, *args):
+        for label in self.results_data:
+            label.config(text='')
+        for label in self.spec_results_data:
+            label.config(text='')
+
     def set_sens(self, *args):
         self.sens = sensor_dict[self.sens_default.get()]
         self.sens_vars[0].set(self.sens.pix_size)
@@ -263,7 +279,7 @@ class MyGUI:
             self.tele_boxes[3].config(state='normal')
 
     def gray_if_fixed_rms(self, *args):
-        '''If the jitter type is set to Fixed RMS, set the power law to 0 and don't let it change.'''
+        '''If the jitter type is set to Fixed RMS, set power law to 0 and don't let it change.'''
         if self.obs_vars[4].get() == 'Fixed RMS':
             self.obs_vars[6].set(0)
             self.obs_boxes[6].config(state='disabled')
@@ -341,7 +357,8 @@ class MyGUI:
             self.results_data[0].config(text=format(observatory.pix_scale, '4.3f'))
             self.results_data[1].config(text=format(observatory.lambda_pivot / 10, '4.1f'))
             self.results_data[2].config(text=format(observatory.psf_fwhm(), '4.3f'))
-            self.results_data[3].config(text=format(100 * observatory.central_pix_frac(), '4.1f') + '%')
+            self.results_data[3].config(text=format(100 * observatory.central_pix_frac(),
+                                                    '4.1f') + '%')
             self.results_data[4].config(text=format(observatory.eff_area(), '4.2f'))
             self.results_data[5].config(text=format(limiting_mag, '4.3f'))
             self.results_data[6].config(text=format(saturating_mag, '4.3f'))
@@ -360,13 +377,13 @@ class MyGUI:
             phot_prec = 10 ** 6 / snr
             self.spec_results_data[0].config(text=format(signal, '4d'))
             self.spec_results_data[1].config(text=format(noise, '4d'))
-            self.spec_results_data[3].config(text=format(snr, '4.3f'))
             noise_str = ('Shot noise: ' + format(results['shot_noise'], '.2f') +
                          '\nDark noise: ' + format(results['dark_noise'], '.2f') +
                          '\nRead noise: ' + format(results['read_noise'], '.2f') +
                          '\nBackground noise: ' + format(results['bkg_noise'], '.2f') +
                          '\nJitter noise: ' + format(results['jitter_noise'], '.2f'))
             self.spec_results_data[2].config(text=noise_str)
+            self.spec_results_data[3].config(text=format(snr, '4.3f'))
             self.spec_results_data[4].config(text=format(phot_prec, '4.3f'))
             self.spec_results_data[5].config(text=format(results['n_aper'], '2d'))
         except ValueError as inst:

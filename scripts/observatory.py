@@ -424,7 +424,7 @@ class Observatory(object):
         jitter_noise : float
             The noise from jitter, in e-.
         '''
-        
+
         if self.jitter == 0:
             num_frames = 1
         jitter_pix = self.jitter / self.pix_scale if self.jitter is not None else None
@@ -436,11 +436,11 @@ class Observatory(object):
         jitter_time = np.min([self.exposure_time / 10.0, 0.5])
         pointings_array = get_pointings(self.exposure_time, num_frames, jitter_time,
                                         resolution, jitter_psd_pix, jitter_pix)
-        
-        jitter_time_list = np.arange(0, self.exposure_time * num_frames, jitter_time)
-        del_x_list = pointings_array[:, :, 0].flatten() / resolution
-        del_y_list = pointings_array[:, :, 1].flatten() / resolution
+
         # # Make a fits file with time, del_x_list, del_y_list.
+        # jitter_time_list = np.arange(0, self.exposure_time * num_frames, jitter_time)
+        # del_x_list = pointings_array[:, :, 0].flatten() / resolution
+        # del_y_list = pointings_array[:, :, 1].flatten() / resolution
         # import astropy.io.fits as fits
         # # Give columns names
         # col1 = fits.Column(name='time (s)', format='E', array=jitter_time_list)
@@ -452,34 +452,32 @@ class Observatory(object):
         # return
 
         signal_list = np.zeros(num_frames)
-        
+
         if self.jitter_psd is None:
             jitter_sigma = self.jitter / self.pix_scale
         else:
             jitter_time = np.min([self.exposure_time / 9.0, 0.5])
             jitter_freq = 1 / (2 * jitter_time)
-            jitter_sigma = integrated_stability(jitter_freq, jitter_psd_pix[:,0], jitter_psd_pix[:,1])
-        initial_grid = self.signal_grid_fine(spectrum, pos,
-                                                img_size, resolution)
-        psf_with_jitter = psfs.jittered_psf(initial_grid, jitter_sigma, resolution=resolution)
+            jitter_sigma = integrated_stability(jitter_freq, jitter_psd_pix[:,0],
+                                                jitter_psd_pix[:,1])
+        print(jitter_sigma)
+        initial_grid = self.signal_grid_fine(spectrum, pos, img_size, resolution)
+        psf_with_jitter = psfs.get_jittered_psf(initial_grid, jitter_sigma, resolution=resolution)
         temp_grid = psf_with_jitter.reshape((img_size, resolution, img_size, resolution))
         pixel_grid_jitter = temp_grid.sum(axis=(1, 3))
-        raw_aper = psfs.optimal_aperture(pixel_grid_jitter, self.single_pix_noise())
+        raw_aper = psfs.get_optimal_aperture(pixel_grid_jitter, self.single_pix_noise())
         aper_pads = psfs.get_aper_padding(raw_aper)
-        aper_shift_x_list = np.zeros(num_frames)
-        aper_shift_y_list = np.zeros(num_frames)
+        # aper_shift_x_list = np.zeros(num_frames)
+        # aper_shift_y_list = np.zeros(num_frames)
         for i in range(num_frames):
             pointings = pointings_array[i]
-            # print(np.std(pointings[:,0]), np.std(pointings[:,1]))
             aper_shift_x = np.rint(np.mean(pointings[:,0]) / resolution).astype(int)
             aper_shift_y = np.rint(np.mean(pointings[:,1]) / resolution).astype(int)
-            aper_shift_x_list[i] = aper_shift_x
-            aper_shift_y_list[i] = aper_shift_y
+            # aper_shift_x_list[i] = aper_shift_x
+            # aper_shift_y_list[i] = aper_shift_y
             if aper_shift_y < -aper_pads[0] or aper_shift_y > aper_pads[1]:
-                print(aper_shift_y)
                 raise ValueError('Subarry size too small for jitter.')
             if aper_shift_x < -aper_pads[2] or aper_shift_x > aper_pads[3]:
-                print(aper_shift_x)
                 raise ValueError('Subarry size too small for jitter.')
             avg_grid = jittered_array(initial_grid, pointings)
             frame = avg_grid.reshape((img_size, resolution, img_size,
@@ -487,26 +485,21 @@ class Observatory(object):
             aper = shift_values(raw_aper, aper_shift_x, aper_shift_y)
             signal = np.sum(frame * aper)
             signal_list[i] = signal
-        # no_jitter_frame = jittered_array(initial_grid, np.array([[0, 0]])).reshape((img_size, resolution, img_size,
-        #                             resolution)).sum(axis=(1, 3))
-        # half_jitter_frame = jittered_array(initial_grid, np.array([[5, 5]])).reshape((img_size, resolution, img_size,
-        #                             resolution)).sum(axis=(1, 3))
-        # print((no_jitter_frame * raw_aper).sum(), (half_jitter_frame * raw_aper).sum())
 
-        import matplotlib.pyplot as plt
-        # plt.imshow(initial_grid)
-        # plt.colorbar()
-        signal_list_times = np.arange(0, self.exposure_time * num_frames, self.exposure_time)
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-        fig.set_size_inches(15, 5)
-        ax1.plot(signal_list_times, signal_list)
-        ax2.plot(jitter_time_list, del_x_list)
-        ax2.plot(signal_list_times, aper_shift_x_list)
-        ax3.plot(jitter_time_list, del_y_list)
-        ax3.plot(signal_list_times, aper_shift_y_list)
-        # ax1.set_xlim(200,250)
-        # ax2.set_xlim(200,250)
-        # ax3.set_xlim(200,250)
+        # import matplotlib.pyplot as plt
+        # # plt.imshow(initial_grid)
+        # # plt.colorbar()
+        # signal_list_times = np.arange(0, self.exposure_time * num_frames, self.exposure_time)
+        # fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+        # fig.set_size_inches(15, 5)
+        # ax1.plot(signal_list_times, signal_list)
+        # ax2.plot(jitter_time_list, del_x_list)
+        # ax2.plot(signal_list_times, aper_shift_x_list)
+        # ax3.plot(jitter_time_list, del_y_list)
+        # ax3.plot(signal_list_times, aper_shift_y_list)
+        # # ax1.set_xlim(200,250)
+        # # ax2.set_xlim(200,250)
+        # # ax3.set_xlim(200,250)
         # plt.show()
 
         signal = np.mean(signal_list) * self.num_exposures
