@@ -460,7 +460,6 @@ class Observatory(object):
             jitter_freq = 1 / (2 * jitter_time)
             jitter_sigma = integrated_stability(jitter_freq, jitter_psd_pix[:,0],
                                                 jitter_psd_pix[:,1])
-        print(jitter_sigma)
         initial_grid = self.signal_grid_fine(spectrum, pos, img_size, resolution)
         psf_with_jitter = psfs.get_jittered_psf(initial_grid, jitter_sigma, resolution=resolution)
         temp_grid = psf_with_jitter.reshape((img_size, resolution, img_size, resolution))

@@ -34,7 +34,7 @@ class MyGUI:
                             'Full Well Capacity']
         self.sens_boxes = []
         self.sens_vars = []
-        for i in enumerate(sens_label_names):
+        for i, name in enumerate(sens_label_names):
             self.sens_labels.append(tk.Label(self.root,
                                              text=sens_label_names[i]))
             self.sens_labels[i].grid(row=i+2, column=0, padx=padx, pady=pady)
@@ -75,7 +75,7 @@ class MyGUI:
                             'Bandpass']
         self.tele_boxes = []
         self.tele_vars = []
-        for i in enumerate(tele_label_names):
+        for i, name in enumerate(tele_label_names):
             self.tele_labels.append(tk.Label(self.root,
                                              text=tele_label_names[i]))
             self.tele_labels[i].grid(row=i+9, column=0, padx=padx, pady=pady)

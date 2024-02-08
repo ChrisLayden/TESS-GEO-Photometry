@@ -98,10 +98,10 @@ def get_pointings(exposure_time, num_frames, jitter_time,
             freqs_new = np.linspace(np.min(freqs), np.max(freqs), psd_length_required)
             psd_arr = np.interp(freqs_new, freqs, psd_arr)
             freqs = freqs_new
-        np.random.seed(3)
+        # np.random.seed(3)
         raw_times_x, time_series_x = psd_to_series(freqs, psd_arr)
         raw_times_y, time_series_y = psd_to_series(freqs, psd_arr)
-        time_series_x *= 0
+        # time_series_x *= 0
         # time_series_y *= 0
         # Evaluate at times corresponding to the jitter steps.
         del_x_list = np.zeros(tot_steps)
