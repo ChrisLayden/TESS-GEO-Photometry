@@ -249,11 +249,12 @@ def get_optimal_aperture(psf_grid, noise_per_pix):
     while n_aper <= func_grid.size:
         imax, jmax = np.unravel_index(func_grid.argmax(), func_grid.shape)
         max_sig_remaining = psf_grid[imax, jmax]
+        # print(max_sig_remaining)
         func_grid[imax, jmax] = -1
         signal = signal + max_sig_remaining
-        noise = np.sqrt(signal + ((n_aper + 1) * noise_per_pix) ** 2)
+        noise = np.sqrt(signal + (n_aper + 1) * noise_per_pix ** 2)
         snr = signal / noise
-
+        
         if snr > snr_max:
             snr_max = snr
             aperture_grid[imax, jmax] = 1

@@ -43,12 +43,13 @@ def shift_values(arr, del_x, del_y):
     '''
     n, m = arr.shape
     new_arr = np.zeros_like(arr)
+    # print(abs(del_x) > m, abs(del_y) > n)
     new_arr[max(del_y, 0):m+min(del_y, 0), max(del_x, 0):n+min(del_x, 0)] = \
         arr[-min(del_y, 0):m-max(del_y, 0), -min(del_x, 0):n-max(del_x, 0)]
     return new_arr
 
 def get_pointings(exposure_time, num_frames, jitter_time,
-                  resolution, psd=None, pix_jitter=None):
+                  resolution, psd):
     '''Jitter the values in an array and take the average array.
 
     Parameters
@@ -64,10 +65,6 @@ def get_pointings(exposure_time, num_frames, jitter_time,
     psd : array-like (optional)
         The power spectral density of the jitter, in pix^2/Hz.
         If not specified, the jitter will be white noise.
-    pix_jitter : float (optional)
-        The RMS jitter of white noise, in pixels. Must be specified
-        if psd is not specified. If both are specified, psd will be
-        used.
 
     Returns
     -------
@@ -78,49 +75,40 @@ def get_pointings(exposure_time, num_frames, jitter_time,
     tot_time = exposure_time * num_frames
     tot_steps = num_steps_frame * num_frames
     times = np.linspace(0, tot_time, tot_steps + 1)
-    # jitter_freq = 1 / (2 * jitter_time)
-    if psd is not None:
-        freqs = psd[:, 0]
-        psd_arr = psd[:, 1]
-        # The duration between time steps in the time series generated
-        # by the PSD
-        psd_time_step = 1 / (2 * np.max(freqs))
-        # Check 2 things with the PSD:
-        # 1. Make sure that the maximum frequency is high enough to
-        #    yield fast enough time steps.
-        # 2. Make sure that the PSD has high enough resolution to yield
-        #    a long enough time series. If resolution is too low, interpolate
-        #    the PSD.
-        if psd_time_step > jitter_time:
-            raise ValueError("PSD maximum frequency too low for jitter time step.")
-        psd_length_required = int(tot_time / psd_time_step / 2 + 1)
-        if len(freqs) < psd_length_required:
-            freqs_new = np.linspace(np.min(freqs), np.max(freqs), psd_length_required)
-            psd_arr = np.interp(freqs_new, freqs, psd_arr)
-            freqs = freqs_new
-        # np.random.seed(3)
-        raw_times_x, time_series_x = psd_to_series(freqs, psd_arr)
-        raw_times_y, time_series_y = psd_to_series(freqs, psd_arr)
-        # time_series_x *= 0
-        # time_series_y *= 0
-        # Evaluate at times corresponding to the jitter steps.
-        del_x_list = np.zeros(tot_steps)
-        del_y_list = np.zeros(tot_steps)
-        for i in range(tot_steps):
-            del_x_list[i] = np.mean(time_series_x[(raw_times_x >= times[i]) &
-                                                  (raw_times_x < times[i+1])])
-            del_y_list[i] = np.mean(time_series_y[(raw_times_y >= times[i]) &
-                                                  (raw_times_y < times[i+1])])
-       # Scale the displacement time series to subpixels
-        del_x_list = np.rint(del_x_list * resolution).astype(int)
-        del_y_list = np.rint(del_y_list * resolution).astype(int)
-    elif pix_jitter is not None:
-        del_x_list = np.rint(np.random.normal(scale=pix_jitter * resolution,
-                                              size=tot_steps)).astype(int)
-        del_y_list = np.rint(np.random.normal(scale=pix_jitter * resolution,
-                                              size=tot_steps)).astype(int)
-    else:
-        raise ValueError("Must specify either jitter PSD or pix_jitter.")
+    freqs = psd[:, 0]
+    psd_arr = psd[:, 1]
+    # The duration between time steps in the time series generated
+    # by the PSD
+    psd_time_step = 1 / (2 * np.max(freqs))
+    # Check 2 things with the PSD:
+    # 1. Make sure that the maximum frequency is high enough to
+    #    yield fast enough time steps.
+    # 2. Make sure that the PSD has high enough resolution to yield
+    #    a long enough time series. If resolution is too low, interpolate
+    #    the PSD.
+    if psd_time_step > jitter_time:
+        raise ValueError("PSD maximum frequency too low for jitter time step.")
+    psd_length_required = int(tot_time / psd_time_step / 2 + 1)
+    if len(freqs) < psd_length_required:
+        freqs_new = np.linspace(np.min(freqs), np.max(freqs), psd_length_required)
+        psd_arr = np.interp(freqs_new, freqs, psd_arr)
+        freqs = freqs_new
+    # np.random.seed(0)
+    raw_times_x, time_series_x = psd_to_series(freqs, psd_arr)
+    raw_times_y, time_series_y = psd_to_series(freqs, psd_arr)
+    # time_series_x *= 0
+    # time_series_y *= 0
+    # Evaluate at times corresponding to the jitter steps.
+    del_x_list = np.zeros(tot_steps)
+    del_y_list = np.zeros(tot_steps)
+    for i in range(tot_steps):
+        del_x_list[i] = np.mean(time_series_x[(raw_times_x >= times[i]) &
+                                                (raw_times_x < times[i+1])])
+        del_y_list[i] = np.mean(time_series_y[(raw_times_y >= times[i]) &
+                                                (raw_times_y < times[i+1])])
+    # Scale the displacement time series to subpixels
+    del_x_list = np.rint(del_x_list * resolution).astype(int)
+    del_y_list = np.rint(del_y_list * resolution).astype(int)
     pointings = np.array(list(zip(del_x_list, del_y_list)))
     # Reshape the pointings so each row corresponds to a frame
     pointings_array = pointings.reshape((num_frames, num_steps_frame, 2))
@@ -234,6 +222,14 @@ def integrated_stability(freq, freq_arr, psd_arr, sigma_level=1):
     integrated_psd = np.trapz(psd_arr[freq_arr < freq], freq_arr[freq_arr < freq])
     stability = np.sqrt(integrated_psd) * sigma_level
     return stability
+
+# Define jitter PSDs from other satellites
+data_folder = os.path.dirname(__file__) + '/../data/'
+tess_psd = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
+# This is the PSD for the raw Asteria poointing, i.e. not accounting for the
+# piezo stage that stabilizes the telescope
+asteria_psd = np.genfromtxt(data_folder + 'ASTERIA_Jitter_PSD.csv', delimiter=',')
+psd_dict = {'TESS': tess_psd, 'ASTERIA': asteria_psd}
 
 if __name__ == '__main__':
     # Check that the PSD to time series function works by taking

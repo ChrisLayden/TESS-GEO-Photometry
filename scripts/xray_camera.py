@@ -5,6 +5,10 @@ import os
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.optimize
+
+# Set text size in all matplotlib plots
+plt.rcParams.update({'font.size': 14})
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -55,8 +59,8 @@ def power_law(tot_flux, index, ene_low=100., ene_high=25000.):
     energy_500_to_10000 = np.trapz(spectral_fluxes, band_500_to_10000)
     band_300_to_2000 = np.logspace(np.log10(300), np.log10(2000), num=300)
     energy_300_to_2000 = np.trapz(spectral_fluxes, band_300_to_2000)
-    print("Flux between 0.5 and 10 keV: ", format(energy_500_to_10000, '3.2e'), " erg/s/cm^2")
-    print("Flux between 0.3 and 2 keV: ", format(energy_300_to_2000, '3.2e'), " erg/s/cm^2")
+    # print("Flux between 0.5 and 10 keV: ", format(energy_500_to_10000, '3.2e'), " erg/s/cm^2")
+    # print("Flux between 0.3 and 2 keV: ", format(energy_300_to_2000, '3.2e'), " erg/s/cm^2")
     # Divide by the photon energy, in erg
     spectral_fluxes = spectral_fluxes / (energies * 1.60218e-12)
     pow_spec = np.array([energies, spectral_fluxes]).T
@@ -251,7 +255,7 @@ if __name__ == '__main__':
     hete_eff_area = copy.copy(ccid20_qe)
     hete_eff_area[:, 1] *= (hete_open_frac * 4 * ccid_area) # 4 CCIDs, but only half work because of OBF loss
     tess_geo_eff_area = copy.copy(ccid80_qe)
-    tess_geo_eff_area[:, 1] *= (tess_geo_open_frac * 4 * ccid_area) # 8 CCIDs
+    tess_geo_eff_area[:, 1] *= (tess_geo_open_frac * 4 * ccid_area) # 4 CCIDs
     swift_eff_area = np.genfromtxt(data_folder + 'SwiftXRT_Aeff.csv', delimiter=',', skip_header=1) # x: eV, y: cm^2
     erosita_eff_area = np.genfromtxt(data_folder + 'eRosita_Aeff.csv', delimiter=',') # x: eV, y: cm^2
     nicer_eff_area = np.genfromtxt(data_folder + 'nicer_aeff.csv', delimiter=',') # x: keV, y: cm^2
@@ -285,9 +289,17 @@ if __name__ == '__main__':
     crab_spec = np.genfromtxt(data_folder + 'crab_spec.csv', delimiter=',', skip_header=1)
     crab_spec[:,0] *= 10 ** 9 # Convert to eV
     # Only consider the x-ray part of the spectrum, where energy is between 100 and 30000 eV
-    crab_spec = crab_spec[(crab_spec[:, 0] > 100) & (crab_spec[:, 0] < 30000)]
+    # crab_spec = crab_spec[(crab_spec[:, 0] > 100) & (crab_spec[:, 0] < 30000)]
+    crab_spec = crab_spec[(crab_spec[:, 0] > 1000) & (crab_spec[:, 0] < 6000)]
+    # plt.plot(crab_spec[:, 0], crab_spec[:, 1])
+    # plt.yscale('log')
+    # plt.xscale('log')
+    # plt.xlabel('Energy (eV)')
+    # plt.ylabel('Photons/cm$^2$/s/eV')
+    # plt.show()
     # Convert the spectrum to photons/cm^2/s/eV
     crab_spec[:, 1] = crab_spec[:, 1] * 10 ** 12 / crab_spec[:, 0] ** 2
+    crab_spec[:, 1] = (crab_spec[:, 0] / 1000) ** -2 * 0.01
 
     # Load x-ray background spectrum. x: E (keV); y: nu*Fnu (keV^2/cm^2/s/sr/keV)
     bkg_spec = np.genfromtxt(data_folder + 'xray_bkg.csv', delimiter=',', skip_header=1)
@@ -295,16 +307,72 @@ if __name__ == '__main__':
     bkg_spec[:, 1] /= 1000 # Convert to phot/cm^2/s/eV/sr
     bkg_spec[:, 0] *= 1000 # Convert to eV
 
-    source_spec = power_law(1.5e-12, 1, ene_low=200, ene_high=20000)
-    collimator_eff_area = copy.copy(ccid80_qe)
-    collimator_throughput = 0.6
-    collimator_eff_area[:, 1] *= (4 * ccid_area * collimator_throughput) # 4 CCIDs
-    
+    source_spec = power_law(5e-12, 2, ene_low=200, ene_high=20000)
+
+    def get_limiting_flux(collimator_area, fov, exposure_time=900, snr=5, flux_guess=1e-12):
+        def snr_diff(flux):
+            source_spec = power_law(flux, 2, ene_low=200, ene_high=20000)
+            snr_result = collimator_snr(collimator_area, source_spec, bkg_spec, exposure_time, fov)
+            return snr_result - snr
+        sol = scipy.optimize.root(snr_diff, flux_guess)
+        return sol.x
+
+    # collimator_eff_area = copy.copy(ccid80_qe)
+    wall_thickness = 0.2 # mm
+    collimator_height = 86 # mm
+    num_points = 1
+    limiting_flux_array = np.zeros(num_points)
+    slat_width_array = np.linspace(0.2, 3, num_points)
+    slat_width_array = np.array([2])
+    fov_array = np.zeros(num_points)
+    throughput_array = np.zeros(num_points)
+    snr_e11 = np.zeros(num_points)
+    for i, slat_width in enumerate(slat_width_array):
+        fov = np.arctan(slat_width / collimator_height) ** 2
+        fov_array[i] = np.sqrt(fov * 3282.8)
+        collimator_throughput = ((slat_width) / (slat_width + wall_thickness)) ** 2
+        throughput_array[i] = collimator_throughput
+        collimator_eff_area = copy.copy(ccid80_qe)
+        collimator_eff_area[:, 1] *= (4 * ccid_area * collimator_throughput) # 4 CCIDs
+        limiting_flux_array[i] = get_limiting_flux(collimator_eff_area, fov, flux_guess=1e-12)
+        source_flux_e10 = power_law(1e-10, 2, ene_low=200, ene_high=20000)
+        snr_e11[i] = collimator_snr(collimator_eff_area, source_flux_e10, bkg_spec, 900, fov)
+    print(snr_e11)
+    fig, (ax1, ax3) = plt.subplots(2, 1, figsize=(8, 6))
+    ax2 = ax1.twinx()
+    ax1.plot(slat_width_array, limiting_flux_array, 'g-')
+    ax2.plot(slat_width_array, fov_array, 'b-')
+    ax1.set_ylabel('Limiting Flux (erg/s/cm$^2$)', color='g')
+    ax2.set_ylabel('1D Field of View (deg)', color='b')
+    ax4 = ax3.twinx()
+    ax3.plot(slat_width_array, snr_e11, 'r-')
+    ax4.plot(slat_width_array, throughput_array, 'y-')
+    ax3.set_xlabel('Collimator Slit Width (mm)')
+    ax3.set_ylabel('SNR (1e-10 erg/s/cm$^2$)', color='r')
+    ax4.set_ylabel('Collimator Throughput', color='y')
+    fig.subplots_adjust(right=0.85)
+    plt.show()
+    # plt.plot(slat_width_array, limiting_flux_array)
+    # plt.xlabel('Slat Width (mm)')
+    # plt.ylabel('Limiting Flux in 900 s (erg/s/cm^2)')
+    # plt.show()
+    # plt.plot(collimator_eff_area[:, 0], collimator_eff_area[:, 1])
+    # plt.xlabel('Energy (eV)')
+    # plt.ylabel('Effective Area (cm^2)')
+    # plt.show()
+    # Set collimator eff area to 50 to compare w/ George's results
+    # collimator_eff_area[:, 1] = 50 * 0.6
+
+    # print(snr(tess_geo_eff_area, 0.2, source_spec, bkg_spec, 900, 0.9))
 
     nicer_fov = 2.54 * 10 ** -6
-    four_sq_deg = 0.001218
-    print(collimator_snr(collimator_eff_area, source_spec, bkg_spec, 10000, four_sq_deg / 4))
-
+    # four_sq_deg = 0.001218
+    # print(collimator_snr(collimator_eff_area, source_spec, bkg_spec, 900, four_sq_deg / 4 * 3))
+    short_concentrator_eff_area = copy.copy(nicer_eff_area)
+    short_concentrator_eff_area[:, 1] *= 1.7
+    print(get_limiting_flux(short_concentrator_eff_area, nicer_fov, flux_guess=1e-12))
+    source_flux_e10 = power_law(1e-10, 2, ene_low=200, ene_high=20000)
+    print(collimator_snr(short_concentrator_eff_area, source_flux_e10, bkg_spec, 900, nicer_fov))
     
     # # # GRB spectrum. x: E (eV); y: E^2*N(E) (erg/cm^2/s)
     # # grb_spec = np.genfromtxt(data_folder + 'grb_spectrum.csv', delimiter=',', skip_header=1)
@@ -317,14 +385,18 @@ if __name__ == '__main__':
     # # grb_flux = np.trapz(grb_spec_interp * energies * 1.60218e-12, energies)
     # # print(grb_flux)
 
+    collimator_throughput = (2 / 2.2) ** 2
+    collimator_eff_area = copy.copy(ccid80_qe)
+    collimator_eff_area[:, 1] *= collimator_throughput * 4 * ccid_area # 4 CCIDs
+
     plot_eff_area = False
     if plot_eff_area:
-        # plt.plot(hete_eff_area[:, 0], hete_eff_area[:, 1], label='HETE SXC (r=20%)')
-        # plt.plot(tess_geo_eff_area[:, 0], 0.4 * tess_geo_eff_area[:, 1], label='TESS-GEO SXC, r=20%')
-        # plt.plot(tess_geo_eff_area[:, 0], tess_geo_eff_area[:, 1], label='TESS-GEO SXC, r=50%')
-        plt.plot(collimator_eff_area[:, 0], collimator_throughput * collimator_eff_area[:, 1], label='Collimator (4 CCID-80s, 60% throughput)')
+    #     plt.plot(hete_eff_area[:, 0], hete_eff_area[:, 1], label='HETE SXC (r=0.2)')
+    #     plt.plot(tess_geo_eff_area[:, 0], tess_geo_eff_area[:, 1], label='TESS-GEO SXC (r=0.2)')
+    #     plt.plot(tess_geo_eff_area[:, 0], 2.5 * tess_geo_eff_area[:, 1], label='TESS-GEO SXC (r=0.5)')
+        plt.plot(collimator_eff_area[:, 0], collimator_eff_area[:, 1], label='Collimator (2 modules; 2mm slats)')
+        plt.plot(nicer_eff_area[:, 0], 1.7 * nicer_eff_area[:, 1], label='Concentrator (8 modules; 50cm focal length)')
         plt.plot(swift_eff_area[:, 0], swift_eff_area[:, 1], label='Swift XRT')
-        plt.plot(nicer_eff_area[:, 0], nicer_eff_area[:, 1], label='NICER (one module)')
         # plt.plot(erosita_eff_area[:, 0], erosita_eff_area[:, 1], label='eRosita')
         # plt.ylim(0.1, 2000)
         # plt.xlim(100, 2000)

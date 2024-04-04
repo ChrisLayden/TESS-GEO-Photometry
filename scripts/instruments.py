@@ -52,7 +52,11 @@ tess_throughput = S.ArrayBandpass(tess_arr[:, 0], tess_arr[:, 1])
 tesscam = Sensor(pix_size=15, read_noise=10, dark_current=5**-4,
                  full_well=200000, qe=tess_throughput)
 
-sensor_dict = {'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
+basic_sensor = Sensor(pix_size=10, read_noise=10, dark_current=0.01,
+                      full_well=100000)
+
+sensor_dict = {'Define New Sensor': basic_sensor,
+               'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
                'GSENSE2020 (UV)': gsense2020,
                'TESS CCD': tesscam, 'ULTRASAT CMOS': ultrasat_cmos,
                'IMX 990 (SWIR)': imx990}
@@ -84,10 +88,12 @@ mono_tele_v3uv = Telescope(diam=8.5, f_num=3.6, psf_type='gaussian',
                            spot_size=2, bandpass=v3uv_bandpass)
 mono_tele_v3swir = Telescope(diam=8.5, f_num=3.6, psf_type='airy', bandpass=v3swir_bandpass)
 
-# Transmission is scaled to give 15,000 e-/s from a mag 10 star
 tess_tele = Telescope(diam=10.5, f_num=1.4, psf_type='gaussian', spot_size=22.91)
 
-telescope_dict = {'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_uv,
+basic_tele = Telescope(diam=10, f_num=1)
+
+telescope_dict = {'Define New Telescope': basic_tele, 
+                  'Mono Tele V10UVS (UV Coatings)': mono_tele_v10_uv,
                   'Mono Tele V10UVS (Vis/SWIR Coatings)': mono_tele_v10_vis,
                   'Mono Tele V8UVS (UV Coatings)': mono_tele_v8_uv,
                   'Mono Tele V8UVS (Vis/SWIR Coatings)': mono_tele_v8_vis,
@@ -138,7 +144,7 @@ if __name__ == '__main__':
     tess_psd = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
     from jitter_tools import integrated_stability
     freqs = np.linspace(1 / 60, 20, 10000)
-    amplitudes = 1 / freqs ** 3
+    amplitudes = 1 / freqs ** 2
     jitter = 1.2
     one_sigma = integrated_stability(1, freqs, amplitudes)
     norm_factor = (jitter / one_sigma) ** 2
@@ -146,9 +152,20 @@ if __name__ == '__main__':
     tess_obs = Observatory(telescope=tess_tele, sensor=tesscam, exposure_time=2,
                            num_exposures=1440, jitter_psd=tess_psd)
     vis_obs = Observatory(telescope=mono_tele_v10_vis, sensor=imx455, exposure_time=2,
-                          num_exposures=1800, jitter_psd=psd, filter_bandpass=johnson_r)
+                          num_exposures=1800, jitter_psd=psd, filter_bandpass=vis_filter)
+    uv_obs = Observatory(telescope=mono_tele_v10_uv, sensor=imx487, exposure_time=2,
+                          num_exposures=1800, jitter_psd=psd, filter_bandpass=ultrasat_filter)
     spec = S.FlatSpectrum(0.3631, fluxunits='Jy')
-    print(tess_obs.observe(spec, num_frames=300, resolution=11))
+    vis_eff_area = vis_obs.eff_area
+    uv_eff_area = uv_obs.eff_area
+    import matplotlib.pyplot as plt
+    plt.plot(vis_eff_area.wave, vis_eff_area.throughput, label='Visible Camera')
+    plt.plot(uv_eff_area.wave, uv_eff_area.throughput, label='UV Camera')
+    plt.xlabel('Wavelength (Angstroms)')
+    plt.ylabel('Effective Area (cm^2)')
+    plt.legend()
+    plt.show()
+    # print(tess_obs.observe(spec, num_frames=300, resolution=11))
     # import time
     # start = time.time()
     # print(vis_obs.observe(spec, num_frames=300, img_size=31, resolution=11))

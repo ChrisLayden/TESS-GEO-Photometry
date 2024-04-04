@@ -8,7 +8,7 @@ from spectra import *
 from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
 from tkinter import messagebox
-from jitter_tools import integrated_stability
+from jitter_tools import integrated_stability, psd_dict
 
 data_folder = os.path.dirname(__file__) + '/../data/'
 
@@ -49,18 +49,18 @@ class MyGUI:
         self.sens_vars[3].set(1)
         self.sens_vars[4].set(100000)
         # If you want to select a default sensor
-        self.sens_menu_header = tk.Label(self.root, text='Predefined Sensor',
+        self.sens_menu_header = tk.Label(self.root, text='Select Sensor',
                                          font=['Arial', 14, 'italic'])
         self.sens_menu_header.grid(row=1, column=0, columnspan=1, padx=padx,
                                    pady=pady)
         self.sens_options = list(sensor_dict.keys())
         self.sens_default = tk.StringVar()
-        self.sens_default.set(None)
         self.sens_menu = tk.OptionMenu(self.root, self.sens_default,
                                        *self.sens_options)
         self.sens_menu.grid(row=1, column=1, columnspan=1, padx=padx,
                             pady=pady)
         self.sens_default.trace_add('write', self.set_sens)
+        self.sens_default.set('Define New Sensor')
         for var in self.sens_vars:
             var.trace_add('write', self.clear_results)
 
@@ -71,7 +71,7 @@ class MyGUI:
                               pady=pady)
         self.tele_labels = []
         tele_label_names = ['Diameter (cm)', 'F/number', 'PSF Type',
-                            'Spot Size FWHM (times diffraction limit)',
+                            'Spot Size FWHM\n(times diffraction-limit)',
                             'Bandpass']
         self.tele_boxes = []
         self.tele_vars = []
@@ -99,18 +99,18 @@ class MyGUI:
         self.tele_vars[4].set(1)
 
         # If you want to select a default telescope
-        self.tele_menu_header = tk.Label(self.root, text='Predefined Telescope',
+        self.tele_menu_header = tk.Label(self.root, text='Select Telescope',
                                          font=['Arial', 14, 'italic'])
         self.tele_menu_header.grid(row=8, column=0, columnspan=1, padx=padx,
                                    pady=pady)
         self.tele_options = list(telescope_dict.keys())
         self.tele_default = tk.StringVar()
-        self.tele_default.set(None)
         self.tele_menu = tk.OptionMenu(self.root, self.tele_default,
                                        *self.tele_options)
         self.tele_menu.grid(row=8, column=1, columnspan=1, padx=padx,
                             pady=pady)
         self.tele_default.trace_add('write', self.set_tele)
+        self.tele_default.set('Define New Telescope')
         for var in self.tele_vars:
             var.trace_add('write', self.clear_results)
 
@@ -123,8 +123,8 @@ class MyGUI:
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
                            'Limiting SNR', 'Ecliptic Latitude (deg)',
-                           'Jitter PSD Type', 'RMS Jitter at 1 Hz (arcsec)',
-                           'PSD Power Law Index', 'Subarray Size', 'Select Filter']
+                           'Jitter PSD', 'RMS Jitter at 1 Hz (arcsec)',
+                           'PSD Power Law Index', 'Select Filter']
         self.obs_boxes = []
         self.obs_vars = []
         for i, label_name in enumerate(obs_label_names):
@@ -132,9 +132,11 @@ class MyGUI:
             self.obs_labels[i].grid(row=i+15, column=0, padx=padx, pady=pady)
             if i == 4:
                 self.obs_vars.append(tk.StringVar())
+                self.psd_options = list(psd_dict.keys())
+                self.psd_options.insert(0, 'Define Power Law')
                 self.obs_boxes.append(tk.OptionMenu(self.root, self.obs_vars[i],
-                                                     'Power Law', 'Fixed Variance'))
-            elif i == 8:
+                                                    *self.psd_options))
+            elif i == 7:
                 self.obs_vars.append(tk.StringVar())
                 self.obs_boxes.append(tk.OptionMenu(self.root, self.obs_vars[i],
                                          *list(filter_dict.keys())))
@@ -151,13 +153,11 @@ class MyGUI:
         self.obs_vars[1].set(1)
         self.obs_vars[2].set(5.0)
         self.obs_vars[3].set(90.0)
-        self.obs_vars[4].set('Fixed Variance')
-        self.obs_vars[4].trace_add('write', self.gray_if_fixed_rms)
+        self.obs_vars[4].set('Define Power Law')
+        self.obs_vars[4].trace_add('write', self.set_psd)
         self.obs_vars[5].set(0.0)
-        self.obs_vars[6].set(0.0)
-        self.obs_boxes[6].config(state='disabled')
-        self.obs_vars[7].set(11)
-        self.obs_vars[8].set('None')
+        self.obs_vars[6].set(2.0)
+        self.obs_vars[7].set('None')
         for var in self.obs_vars:
             var.trace_add('write', self.clear_results)
 
@@ -266,9 +266,11 @@ class MyGUI:
         self.sens_vars[1].set(self.sens.read_noise)
         self.sens_vars[2].set(self.sens.dark_current)
         self.sens_vars[4].set(self.sens.full_well)
-        self.sens_vars[3] = tk.StringVar()
-        self.sens_boxes[3].config(textvariable=self.sens_vars[3])
-        self.sens_vars[3].set('ARRAY')
+        if self.sens_default.get() != 'Define New Sensor':
+            self.sens_vars[3] = tk.StringVar()
+            self.sens_vars[3].set('ARRAY')
+            self.sens_boxes[3].config(textvariable=self.sens_vars[3])
+            self.sens_boxes[3].config(state='disabled')
 
     def gray_if_airy(self, *args):
         '''If the PSF type is set to airy, set the spot size FWHM to 1 and don't let it change.'''
@@ -276,15 +278,7 @@ class MyGUI:
             self.tele_vars[3].set(1)
             self.tele_boxes[3].config(state='disabled')
         else:
-            self.tele_boxes[3].config(state='normal')
-
-    def gray_if_fixed_rms(self, *args):
-        '''If the jitter type is set to Fixed RMS, set power law to 0 and don't let it change.'''
-        if self.obs_vars[4].get() == 'Fixed RMS':
-            self.obs_vars[6].set(0)
-            self.obs_boxes[6].config(state='disabled')
-        else:
-            self.obs_boxes[6].config(state='normal')
+            self.tele_boxes[3].config(state='normal')    
 
     def set_tele(self, *args):
         self.tele = telescope_dict[self.tele_default.get()]
@@ -293,6 +287,21 @@ class MyGUI:
         self.tele_vars[2].set(self.tele.psf_type)
         self.tele_vars[3].set(self.tele.spot_size)
         self.tele_vars[4].set(self.tele.bandpass)
+
+    def set_psd(self, *args):
+        if self.obs_vars[4].get() != 'Define Power Law':
+            self.psd = psd_dict[self.obs_vars[4].get()]
+            rms_jitter = integrated_stability(1, self.psd[:, 0], self.psd[:, 1])
+            self.obs_vars[5].set(np.round(rms_jitter, 2))
+            self.obs_boxes[5].config(state='disabled')
+            self.obs_vars[6].set(None)
+            self.obs_boxes[6].config(state='disabled')
+        else:
+            self.obs_boxes[5].config(state='normal')
+            self.obs_boxes[6].config(state='normal')
+            self.obs_vars[5].set(0.0)
+            self.obs_vars[6].set(2.0)
+
 
     def set_obs(self):
         sens_vars = [i.get() for i in self.sens_vars]
@@ -308,23 +317,22 @@ class MyGUI:
         num_exposures = int(self.obs_vars[1].get())
         limiting_snr = self.obs_vars[2].get()
         eclip_angle = self.obs_vars[3].get()
-        filter_bp = filter_dict[self.obs_vars[8].get()]
-        jitter = self.obs_vars[5].get()
-        if self.obs_vars[4].get() == 'Power Law':
-            freqs = np.linspace(1 / 60, 5, 10000)
+        filter_bp = filter_dict[self.obs_vars[7].get()]
+        rms_jitter = self.obs_vars[5].get()
+        if rms_jitter == 0:
+            self.psd = None
+        elif self.obs_vars[4].get() == 'Define Power Law':
+            freqs = np.linspace(1 / 60, 100, 10000)
             amplitudes = 1 / freqs ** self.obs_vars[6].get()
             one_sigma = integrated_stability(1, freqs, amplitudes)
-
-            norm_factor = (jitter / one_sigma) ** 2
-            psd = np.array([freqs, norm_factor * amplitudes]).T
-        else:
-            psd = None
+            norm_factor = (rms_jitter / one_sigma) ** 2
+            self.psd = np.array([freqs, norm_factor * amplitudes]).T
         observatory = Observatory(sens, tele, exposure_time=exposure_time,
                                   num_exposures=num_exposures,
                                   limiting_s_n=limiting_snr,
                                   filter_bandpass=filter_bp,
                                   eclip_lat=eclip_angle,
-                                  jitter=jitter, jitter_psd=psd)
+                                  jitter_psd=self.psd)
         return observatory
 
     def set_spectrum(self):
@@ -359,7 +367,7 @@ class MyGUI:
             self.results_data[2].config(text=format(observatory.psf_fwhm(), '4.3f'))
             self.results_data[3].config(text=format(100 * observatory.central_pix_frac(),
                                                     '4.1f') + '%')
-            self.results_data[4].config(text=format(observatory.eff_area(), '4.2f'))
+            self.results_data[4].config(text=format(observatory.eff_area_pivot(), '4.2f'))
             self.results_data[5].config(text=format(limiting_mag, '4.3f'))
             self.results_data[6].config(text=format(saturating_mag, '4.3f'))
         except ValueError as inst:
@@ -369,8 +377,7 @@ class MyGUI:
         try:
             spectrum = self.set_spectrum()
             observatory = self.set_obs()
-            img_size = self.obs_vars[7].get()
-            results = observatory.observe(spectrum, num_frames=100, img_size=img_size)
+            results = observatory.observe(spectrum)
             signal = int(results['signal'])
             noise = int(results['tot_noise'])
             snr = signal / noise
