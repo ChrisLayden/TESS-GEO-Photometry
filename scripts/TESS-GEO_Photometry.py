@@ -174,8 +174,11 @@ class MyGUI:
                              pady=pady)
 
         self.results_labels = []
-        results_label_names = ['Pixel Scale (arcsec/pix)', 'Pivot Wavelength (nm)',
-                               'PSF FWHM (um)', 'Central Pixel Ensquared Energy',
+        results_label_names = ['Pixel Scale (arcsec/pix)',
+                               'Pivot Wavelength (nm)',
+                               'PSF FWHM with no jitter (um)',
+                               'Central Pixel Ensquared Energy',
+                               'RMS Jitter at Exposure Time (arcsec)',
                                'Effective Area (cm^2)', 'Limiting AB magnitude',
                                'Saturating AB magnitude']
         self.results_data = []
@@ -361,15 +364,23 @@ class MyGUI:
             observatory = self.set_obs()
             limiting_mag = observatory.limiting_mag()
             saturating_mag = observatory.saturating_mag()
+            jitter_psd = observatory.jitter_psd
+            if jitter_psd is None:
+                jitter_sigma = 0
+            else:
+                exp_freq = 1 / observatory.exposure_time / 2
+                jitter_sigma = integrated_stability(exp_freq, jitter_psd[:, 0],
+                                                    jitter_psd[:, 1])
 
             self.results_data[0].config(text=format(observatory.pix_scale, '4.3f'))
             self.results_data[1].config(text=format(observatory.lambda_pivot / 10, '4.1f'))
             self.results_data[2].config(text=format(observatory.psf_fwhm(), '4.3f'))
             self.results_data[3].config(text=format(100 * observatory.central_pix_frac(),
                                                     '4.1f') + '%')
-            self.results_data[4].config(text=format(observatory.eff_area_pivot(), '4.2f'))
-            self.results_data[5].config(text=format(limiting_mag, '4.3f'))
-            self.results_data[6].config(text=format(saturating_mag, '4.3f'))
+            self.results_data[4].config(text=format(jitter_sigma, '4.3f'))
+            self.results_data[5].config(text=format(observatory.eff_area_pivot(), '4.2f'))
+            self.results_data[6].config(text=format(limiting_mag, '4.3f'))
+            self.results_data[7].config(text=format(saturating_mag, '4.3f'))
         except ValueError as inst:
             messagebox.showerror('Value Error', inst)
 

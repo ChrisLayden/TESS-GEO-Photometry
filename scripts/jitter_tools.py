@@ -228,8 +228,10 @@ data_folder = os.path.dirname(__file__) + '/../data/'
 tess_psd = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
 # This is the PSD for the raw Asteria poointing, i.e. not accounting for the
 # piezo stage that stabilizes the telescope
-asteria_psd = np.genfromtxt(data_folder + 'ASTERIA_Jitter_PSD.csv', delimiter=',')
-psd_dict = {'TESS': tess_psd, 'ASTERIA': asteria_psd}
+asteria_piezo_psd = np.genfromtxt(data_folder + 'ASTERIA_with_piezo.csv', delimiter=',')
+asteria_no_piezo_psd = np.genfromtxt(data_folder + 'ASTERIA_no_piezo.csv', delimiter=',')
+psd_dict = {'TESS': tess_psd, 'ASTERIA Piezo': asteria_piezo_psd,
+            'ASTERIA No Piezo': asteria_no_piezo_psd}
 
 if __name__ == '__main__':
     # Check that the PSD to time series function works by taking

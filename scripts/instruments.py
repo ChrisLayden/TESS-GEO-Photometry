@@ -16,7 +16,9 @@ imx455 = Sensor(pix_size=3.76, read_noise=1.65, dark_current=1.5*10**-3,
                 full_well=51000, qe=imx455_qe)
 
 
-imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
+# imx487_qe = S.FileBandpass(data_folder + 'imx487.fits')
+imx487_arr = np.genfromtxt(data_folder + 'IMX487_QE_Aaron.csv', delimiter=',')
+imx487_qe = S.ArrayBandpass(imx487_arr[:, 0], imx487_arr[:, 1])
 imx487 = Sensor(pix_size=2.74, read_noise=2.51, dark_current=5**-4,
                 full_well=9662, qe=imx487_qe)
 
@@ -30,7 +32,9 @@ gsense2020 = Sensor(pix_size=6.5, read_noise=2.67, dark_current=0.2,
 gsense4040 = Sensor(pix_size=9, read_noise=2.3, dark_current=0.04,
                     full_well=39000, qe=gsense2020_qe)
 
-ultrasat_arr = np.genfromtxt(data_folder + 'ULTRASAT_QE.csv', delimiter=',')
+ultrasat_arr = np.genfromtxt(data_folder + 'ULTRASAT_FULL_QE.csv', delimiter=',')
+# Multiply the first column by 10 to convert from nm to Angstroms
+ultrasat_arr[:, 0] *= 10
 ultrasat_qe = S.ArrayBandpass(ultrasat_arr[:, 0], ultrasat_arr[:, 1])
 ultrasat_cmos = Sensor(pix_size=9.5, read_noise=3.5, dark_current=0.026,
                        full_well=100000, qe=ultrasat_qe)
