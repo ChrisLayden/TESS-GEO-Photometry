@@ -123,7 +123,7 @@ class MyGUI:
         self.obs_labels = []
         obs_label_names = ['Exposure Time (s)', 'Exposures in Stack',
                            'Limiting SNR', 'Ecliptic Latitude (deg)',
-                           'Jitter PSD', 'RMS Jitter at 1 Hz (arcsec)',
+                           'Jitter PSD', 'Total RMS Jitter Power (arcsec)',
                            'PSD Power Law Index', 'Select Filter']
         self.obs_boxes = []
         self.obs_vars = []
@@ -177,9 +177,9 @@ class MyGUI:
         results_label_names = ['Pixel Scale (arcsec/pix)',
                                'Pivot Wavelength (nm)',
                                'PSF FWHM with no jitter (um)',
-                               'Central Pixel Ensquared Energy',
-                               'RMS Jitter at Exposure Time (arcsec)',
-                               'Effective Area (cm^2)', 'Limiting AB magnitude',
+                               'Maximum Central Pixel Ensquared Energy',
+                               'RMS Jitter Beyond Sampling Frequency (arcsec)',
+                               'Effective Area at Pivot Wavelength (cm^2)', 'Limiting AB magnitude',
                                'Saturating AB magnitude']
         self.results_data = []
         for i, name in enumerate(results_label_names):
@@ -294,7 +294,7 @@ class MyGUI:
     def set_psd(self, *args):
         if self.obs_vars[4].get() != 'Define Power Law':
             self.psd = psd_dict[self.obs_vars[4].get()]
-            rms_jitter = integrated_stability(1, self.psd[:, 0], self.psd[:, 1])
+            rms_jitter = integrated_stability(100, self.psd[:, 0], self.psd[:, 1])
             self.obs_vars[5].set(np.round(rms_jitter, 2))
             self.obs_boxes[5].config(state='disabled')
             self.obs_vars[6].set(None)
@@ -327,7 +327,7 @@ class MyGUI:
         elif self.obs_vars[4].get() == 'Define Power Law':
             freqs = np.linspace(1 / 60, 100, 10000)
             amplitudes = 1 / freqs ** self.obs_vars[6].get()
-            one_sigma = integrated_stability(1, freqs, amplitudes)
+            one_sigma = integrated_stability(100, freqs, amplitudes)
             norm_factor = (rms_jitter / one_sigma) ** 2
             self.psd = np.array([freqs, norm_factor * amplitudes]).T
         observatory = Observatory(sens, tele, exposure_time=exposure_time,
@@ -368,9 +368,7 @@ class MyGUI:
             if jitter_psd is None:
                 jitter_sigma = 0
             else:
-                exp_freq = 1 / observatory.exposure_time / 2
-                jitter_sigma = integrated_stability(exp_freq, jitter_psd[:, 0],
-                                                    jitter_psd[:, 1])
+                jitter_sigma = observatory.get_remaining_jitter()
 
             self.results_data[0].config(text=format(observatory.pix_scale, '4.3f'))
             self.results_data[1].config(text=format(observatory.lambda_pivot / 10, '4.1f'))

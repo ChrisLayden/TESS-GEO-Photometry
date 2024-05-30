@@ -96,8 +96,6 @@ def get_pointings(exposure_time, num_frames, jitter_time,
     # np.random.seed(0)
     raw_times_x, time_series_x = psd_to_series(freqs, psd_arr)
     raw_times_y, time_series_y = psd_to_series(freqs, psd_arr)
-    # time_series_x *= 0
-    # time_series_y *= 0
     # Evaluate at times corresponding to the jitter steps.
     del_x_list = np.zeros(tot_steps)
     del_y_list = np.zeros(tot_steps)
@@ -236,22 +234,52 @@ psd_dict = {'TESS': tess_psd, 'ASTERIA Piezo': asteria_piezo_psd,
 if __name__ == '__main__':
     # Check that the PSD to time series function works by taking
     # the PSD of the series
-    test_freqs = np.linspace(1/60, 5, 100000)
-    test_psd = test_freqs ** -1
-    times_test, time_series_test = psd_to_series(test_freqs, test_psd)
+    test_freqs = np.linspace(1/600, 10, 200000)
+    test_psd = test_freqs ** -3
+    test_psd[:10000] = test_psd[10000]
+    test_psd[40000:] = 0
+    new_times, new_time_series = psd_to_series(test_freqs, test_psd)
+    time_stability = np.zeros(22)
+    freq_stability = np.zeros(22)
+    sampling_times = np.linspace(-1, 20, 22)
+    sampling_times[0] = 0.25
+    sampling_times[1] = 0.5
+    for j, sampling_time in enumerate(sampling_times):
+        num_del_points = int(20000 / sampling_time)
+        del_list = np.zeros(num_del_points)
+        del_times_list = np.linspace(0, num_del_points, num_del_points) * sampling_time
+        sub_std = 0
+        for i in range(num_del_points):
+            section_time_series = new_time_series[(new_times >= i*sampling_time) &
+                                                  (new_times < (i+1)*sampling_time)]
+            sub_std += np.std(section_time_series) / num_del_points
+            del_list[i] = np.mean(section_time_series)
+        freq_stability[j] = integrated_stability(1 / sampling_time / 2, test_freqs, test_psd)
+        time_stability[j] = np.std(del_list)
+        print(time_stability[j], freq_stability[j], sub_std, np.sqrt(time_stability[j]**2 + sub_std**2))
+    print(np.std(new_time_series))
+    # plt.scatter(new_times, new_time_series, s=0.01)
+    # plt.plot(del_times_list, del_list, 'r')
+    # plt.plot(tess_freqs, tess_psd)
+    # plt.plot(freqs_new, psd_arr)
+    plt.plot(sampling_times, time_stability, label='Time Stability')
+    plt.plot(sampling_times, freq_stability, label='Frequency Stability')
+    plt.legend()
+    plt.xlabel('Sampling Time (s)')
+    plt.ylabel('Stability (arcsec)')
+    plt.show()
 
 
-    # Load TESS jitter data
-    data_folder = os.path.dirname(__file__) + '/../data/'
-    tess_data = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
-    tess_freqs = tess_data[:, 0]
-    tess_psd = tess_data[:, 1]
+    tess_freqs = tess_psd[:, 0]
+    tess_psd = tess_psd[:, 1]
     tess_times, tess_time_series = psd_to_series(tess_freqs, tess_psd)
+    freqs_new = np.linspace(np.min(tess_freqs), np.max(tess_freqs), 400000)
+    psd_arr = np.interp(freqs_new, tess_freqs, tess_psd)
     # Plot the integrated 1-sigma stability vs. frequency
     tess_stability = np.zeros(len(tess_freqs))
     for j, frequency in enumerate(tess_freqs):
         tess_stability[j] = integrated_stability(frequency, tess_freqs, tess_psd)
-    plt.plot(tess_freqs, tess_stability)
-    plt.xscale('log')
-    plt.yscale('log')
+    # plt.plot(tess_freqs, tess_stability)
+    # plt.xscale('log')
+    # plt.yscale('log')
     plt.show()

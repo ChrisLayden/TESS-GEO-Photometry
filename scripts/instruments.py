@@ -22,6 +22,16 @@ imx487_qe = S.ArrayBandpass(imx487_arr[:, 0], imx487_arr[:, 1])
 imx487 = Sensor(pix_size=2.74, read_noise=2.51, dark_current=5**-4,
                 full_well=9662, qe=imx487_qe)
 
+cosmos_arr = np.genfromtxt(data_folder + 'cosmos_qe_datasheet.csv', delimiter=',')
+cosmos_qe = S.ArrayBandpass(cosmos_arr[:, 0] * 10, cosmos_arr[:, 1])
+cosmos = Sensor(pix_size=10, read_noise=1.0, dark_current=0.005, full_well=80000,
+                qe=cosmos_qe)
+
+qcmos_arr = np.genfromtxt(data_folder + 'qCMOS_QE.csv', delimiter=',')
+qcmos_qe = S.ArrayBandpass(qcmos_arr[:, 0] * 10, qcmos_arr[:, 1])
+qcmos = Sensor(pix_size=4.6, read_noise=0.35, dark_current=0.006, full_well=7000,
+               qe=qcmos_qe)
+
 gsense2020_arr = np.genfromtxt(data_folder + 'GSENSE2020_QE.csv', delimiter=',')
 # Multiply the first column by 10 to convert from nm to Angstroms
 gsense2020_qe = S.ArrayBandpass(gsense2020_arr[:, 0] * 10, gsense2020_arr[:, 1])
@@ -61,6 +71,7 @@ basic_sensor = Sensor(pix_size=10, read_noise=10, dark_current=0.01,
 
 sensor_dict = {'Define New Sensor': basic_sensor,
                'IMX 455 (Visible)': imx455, 'IMX 487 (UV)': imx487,
+               'COSMOS': cosmos, 'qCMOS': qcmos,
                'GSENSE2020 (UV)': gsense2020,
                'TESS CCD': tesscam, 'ULTRASAT CMOS': ultrasat_cmos,
                'IMX 990 (SWIR)': imx990}
@@ -163,10 +174,26 @@ if __name__ == '__main__':
     vis_eff_area = vis_obs.eff_area
     uv_eff_area = uv_obs.eff_area
     import matplotlib.pyplot as plt
-    plt.plot(vis_eff_area.wave, vis_eff_area.throughput, label='Visible Camera')
-    plt.plot(uv_eff_area.wave, uv_eff_area.throughput, label='UV Camera')
-    plt.xlabel('Wavelength (Angstroms)')
-    plt.ylabel('Effective Area (cm^2)')
+    # plt.plot(vis_eff_area.wave, vis_eff_area.throughput, label='Visible Camera')
+    # plt.plot(uv_eff_area.wave, uv_eff_area.throughput, label='UV Camera')
+    # plt.xlabel('Wavelength (Angstroms)')
+    # plt.ylabel('Effective Area (cm^2)')
+    # plt.legend()
+    # plt.show()
+    import matplotlib.pyplot as plt
+    imx487_bandpass = imx487_qe * ultrasat_filter
+    cosmos_bandpass = cosmos_qe * ultrasat_filter
+    qcmos_bandpass = qcmos_qe * ultrasat_filter
+    # plt.plot(cosmos_bandpass.wave / 10, cosmos_bandpass.throughput, label='COSMOS')
+    # plt.plot(qcmos_bandpass.wave / 10, qcmos_bandpass.throughput, label='qCMOS')
+    # plt.plot(imx487_bandpass.wave / 10, imx487_bandpass.throughput, label='IMX 487')
+    # plt.plot(ultrasat_qe.wave / 10, ultrasat_qe.throughput, label='ULTRASAT CMOS')
+    plt.plot(cosmos_qe.wave / 10, cosmos_qe.throughput, label='COSMOS')
+    plt.plot(qcmos_qe.wave / 10, qcmos_qe.throughput, label='qCMOS')
+    plt.plot(imx487_qe.wave / 10, imx487_qe.throughput, label='IMX 487')
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Quantum Efficiency')
+    plt.title('Sensor-Only Quantum Efficiency')
     plt.legend()
     plt.show()
     # print(tess_obs.observe(spec, num_frames=300, resolution=11))

@@ -87,7 +87,7 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, sigma):
     mu : array-like
         The mean of the Gaussian, in microns.
     Sigma : array-like
-        The covariance matrix of the Gaussian, in microns.
+        The covariance matrix of the Gaussian, in microns^2.
 
     Returns
     -------

@@ -187,9 +187,9 @@ class Observatory(object):
         self.mean_pix_bkg = (self.bkg_per_pix() + self.sensor.dark_current *
                              self.exposure_time)
         self.jitter_psd = jitter_psd
-        # The 1-sigma jitter in arcseconds measured by sampling at the exposure time
+        # The 1-sigma jitter in arcseconds measured at a very fast frequency
         if self.jitter_psd is not None:
-            self.stability = integrated_stability(2 / self.exposure_time,
+            self.stability = integrated_stability(10,
                                                   jitter_psd[:, 0],
                                                   jitter_psd[:, 1])
         else:
@@ -453,6 +453,29 @@ class Observatory(object):
                 relative_signal_grid[i, j] = np.sum(shifted_grid)
         relative_signal_grid /= np.max(relative_signal_grid)
         return relative_signal_grid
+    
+    def get_central_pix_avg(self, img_size=11, resolution=11, pos=np.array([0, 0])):
+        '''Get the average fraction of the signal in the central pixel, assuming uniform centroid position.'''
+        spec = S.FlatSpectrum(10, fluxunits='abmag')
+        spec.convert('fnu')
+        initial_grid = self.signal_grid_fine(spec, pos, img_size, resolution)
+        remaining_jitter = self.get_remaining_jitter() / self.pix_scale * self.sensor.pix_size
+        cov_mat = [[remaining_jitter ** 2, 0], [0, remaining_jitter ** 2]]
+        jitter_gaussian = psfs.gaussian_psf(img_size, resolution, self.sensor.pix_size,
+                                            np.array([0, 0]), cov_mat)
+        # convolve the jitter gaussian with the initial grid
+        import scipy.signal
+        initial_grid = scipy.signal.convolve2d(initial_grid, jitter_gaussian, mode='same')
+        central_frac_grid = np.zeros((resolution, resolution))
+        for i in range(resolution):
+            for j in range(resolution):
+                del_x = i - resolution // 2
+                del_y = j - resolution  // 2
+                shifted_grid = shift_values(initial_grid, del_x, del_y)
+                shifted_grid_pix = shifted_grid.reshape((img_size, resolution, img_size, resolution)).sum(axis=(1, 3))
+                central_pix_frac = np.max(shifted_grid_pix) / np.sum(shifted_grid_pix)
+                central_frac_grid[i, j] = central_pix_frac
+        return np.mean(central_frac_grid)
 
     def get_pointings(self, num_frames=100, resolution=11, save_fits=False):
         '''Get time series jitter data.
@@ -494,6 +517,22 @@ class Observatory(object):
             tbhdu = fits.BinTableHDU.from_columns(cols)
             tbhdu.writeto('pointings.fits', overwrite=True)
         return pointings_array
+    
+    def get_remaining_jitter(self, resolution=11):
+        '''Find the power remaining in the jitter beyond the image sampling frequency.'''
+        if self.jitter_psd is not None:
+            jitter_time = np.min([self.exposure_time / 100.0, 0.5])
+            tot_power = np.sqrt(np.trapz(self.jitter_psd[:, 1], self.jitter_psd[:, 0]))
+            jitter_time = self.exposure_time
+            pointings_array = get_pointings(self.exposure_time, 500,
+                                            jitter_time, resolution, self.jitter_psd)
+            pointings_x = pointings_array[:, :, 0].flatten() / resolution
+            pointings_y = pointings_array[:, :, 1].flatten() / resolution
+            removed_power = (np.std(pointings_x) + np.std(pointings_y)) / 2
+            remaining_power = np.sqrt(tot_power ** 2 - removed_power ** 2)    
+        else:
+            remaining_power = 0
+        return remaining_power
 
     def get_opt_aper(self, spectrum, pos=np.array([0, 0]), img_size=11,
                      resolution=11, num_aper_frames=200):
@@ -548,8 +587,8 @@ class Observatory(object):
             aper_pads = psfs.get_aper_padding(optimal_aper)
             max_falloff = np.ceil(max_shift / resolution - np.min(aper_pads) + 1).astype(int)
             import matplotlib.pyplot as plt
-            plt.imshow(optimal_aper)
-            plt.show()
+            # plt.imshow(optimal_aper)
+            # plt.show()
             if max_falloff > 0:
                 img_size += 2 * max_falloff
             else:
@@ -604,12 +643,14 @@ class Observatory(object):
         n_aper = np.sum(opt_aper)
         # Don't add source shot, background, dark current, or read noise, because
         # we already know their effect. Here we want to isolate jitter noise.
-        # For a realistic image with all noise sources, use the get_images.
+        # For a realistic image with all noise sources, use the get_images method.
         initial_grid = self.signal_grid_fine(spectrum, pos, img_size, resolution)
         signal_list = np.zeros(num_frames)
         intrapix_sigma = self.sensor.intrapix_sigma
         intrapix_grid = self.get_intrapix_grid(img_size, resolution, intrapix_sigma)
         rel_signal_grid = self.get_relative_signal_grid(intrapix_sigma, pos, img_size, resolution)
+        shifts_x = np.zeros(num_frames)
+        center_fracs = np.zeros(num_frames)
         for i in range(num_frames):
             pointings = pointings_array[i]
             avg_grid = jittered_array(initial_grid, pointings)
@@ -620,8 +661,11 @@ class Observatory(object):
             # by the same amount. On board, this would require a centroiding algorithm
             # or a feed-in from the star tracker.
             shift_x = np.rint(np.mean(pointings[:,0]) / resolution).astype(int)
+            shifts_x[i] = shift_x
             shift_y = np.rint(np.mean(pointings[:,1]) / resolution).astype(int)
+            print(shift_x, shift_y)
             frame = shift_values(frame, -shift_x, -shift_y)
+            center_fracs[i] = frame.max() / frame.sum()
             frame_signal = np.sum(frame * opt_aper)
             if subpix_correct:
                 subpix_shift_x = np.rint(np.mean(pointings[:,0]) - shift_x * resolution)
@@ -639,7 +683,7 @@ class Observatory(object):
             # plt.title(frame_signal)
             # plt.show()
             signal_list[i] = frame_signal
-
+        print(np.mean(center_fracs))
         signal = np.mean(signal_list) * self.num_exposures
         jitter_noise = np.std(signal_list) * np.sqrt(self.num_exposures)
         shot_noise = np.sqrt(signal)
@@ -749,15 +793,24 @@ if __name__ == '__main__':
 
     flat_spec = S.FlatSpectrum(15, fluxunits='abmag')
     flat_spec.convert('fnu')
-    freqs = np.linspace(1 / 600, 5, 10000)
-    psd = freqs ** -2 / 1000
+    freqs = np.linspace(1 / 600, 5, 100000)
+    psd = freqs ** -3 * 10
+    psd[:25000] = psd[25000]
+    tess_psd = np.genfromtxt(data_folder + 'TESS_Jitter_PSD.csv', delimiter=',')
     tess_geo_obs = Observatory(telescope=mono_tele_v10uvs, sensor=imx455,
                                filter_bandpass=r_bandpass, eclip_lat=90,
-                               exposure_time=1, num_exposures=6,
-                               jitter_psd=np.array([freqs, psd]).T)
-    # results = tess_geo_obs.observe(flat_spec, num_frames=100, img_size=11, resolution=11, subpix_correct=True)
+                               exposure_time=20, num_exposures=6,
+                               jitter_psd=tess_psd)
+    # tess_geo_obs = Observatory(telescope=mono_tele_v10uvs, sensor=imx455,
+    #                            filter_bandpass=r_bandpass, eclip_lat=90,
+    #                            exposure_time=0.2, num_exposures=6,
+    #                            jitter_psd=np.array([freqs, psd]).T)
+    print(tess_geo_obs.stability)
+    print(tess_geo_obs.get_remaining_jitter())
+    print(tess_geo_obs.central_pix_frac())
+    print(tess_geo_obs.get_central_pix_avg())
+    results = tess_geo_obs.observe(flat_spec, num_frames=500, img_size=11, resolution=11, subpix_correct=True)
     # print(results)
-    print(integrated_stability(1/300, freqs, psd))
     # imgs, aper = tess_geo_obs.get_images(flat_spec, num_images=1)
     # import matplotlib.pyplot as plt
     # plt.imshow(imgs[0])
