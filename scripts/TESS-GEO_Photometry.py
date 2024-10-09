@@ -31,7 +31,7 @@ class MyGUI:
         self.sens_labels = []
         sens_label_names = ['Pixel Size (um)', 'Read Noise (e-/pix)',
                             'Dark Current (e-/pix/s)', 'Quantum Efficiency',
-                            'Full Well Capacity']
+                            'Full Well Capacity', 'Intrapixel Response STD (um)']
         self.sens_boxes = []
         self.sens_vars = []
         for i, name in enumerate(sens_label_names):
@@ -48,6 +48,7 @@ class MyGUI:
         self.sens_vars[2].set(0.01)
         self.sens_vars[3].set(1)
         self.sens_vars[4].set(100000)
+        self.sens_vars[5].set(np.inf)
         # If you want to select a default sensor
         self.sens_menu_header = tk.Label(self.root, text='Select Sensor',
                                          font=['Arial', 14, 'italic'])
@@ -67,7 +68,7 @@ class MyGUI:
         # Defining telescope properties
         self.tele_header = tk.Label(self.root, text='Telescope Properties',
                                     font=['Arial', 16, 'bold'])
-        self.tele_header.grid(row=7, column=0, columnspan=2, padx=padx,
+        self.tele_header.grid(row=8, column=0, columnspan=2, padx=padx,
                               pady=pady)
         self.tele_labels = []
         tele_label_names = ['Diameter (cm)', 'F/number', 'PSF Type',
@@ -78,7 +79,7 @@ class MyGUI:
         for i, name in enumerate(tele_label_names):
             self.tele_labels.append(tk.Label(self.root,
                                              text=tele_label_names[i]))
-            self.tele_labels[i].grid(row=i+9, column=0, padx=padx, pady=pady)
+            self.tele_labels[i].grid(row=i+10, column=0, padx=padx, pady=pady)
             if i == 2:
                 self.tele_vars.append(tk.StringVar())
                 self.tele_boxes.append(tk.OptionMenu(self.root, self.tele_vars[i],
@@ -88,7 +89,7 @@ class MyGUI:
                 self.tele_vars.append(tk.DoubleVar())
                 self.tele_boxes.append(tk.Entry(self.root, width=10,
                                                 textvariable=self.tele_vars[i]))
-            self.tele_boxes[i].grid(row=i+9, column=1, padx=padx, pady=pady)
+            self.tele_boxes[i].grid(row=i+10, column=1, padx=padx, pady=pady)
 
         self.tele_vars[0].set(10)
         self.tele_vars[1].set(10)
@@ -101,13 +102,13 @@ class MyGUI:
         # If you want to select a default telescope
         self.tele_menu_header = tk.Label(self.root, text='Select Telescope',
                                          font=['Arial', 14, 'italic'])
-        self.tele_menu_header.grid(row=8, column=0, columnspan=1, padx=padx,
+        self.tele_menu_header.grid(row=9, column=0, columnspan=1, padx=padx,
                                    pady=pady)
         self.tele_options = list(telescope_dict.keys())
         self.tele_default = tk.StringVar()
         self.tele_menu = tk.OptionMenu(self.root, self.tele_default,
                                        *self.tele_options)
-        self.tele_menu.grid(row=8, column=1, columnspan=1, padx=padx,
+        self.tele_menu.grid(row=9, column=1, columnspan=1, padx=padx,
                             pady=pady)
         self.tele_default.trace_add('write', self.set_tele)
         self.tele_default.set('Define New Telescope')
@@ -117,7 +118,7 @@ class MyGUI:
         # Defining observing properties
         self.obs_header = tk.Label(self.root, text='Observing Properties',
                                    font=['Arial', 16, 'bold'])
-        self.obs_header.grid(row=14, column=0, columnspan=2, padx=padx,
+        self.obs_header.grid(row=15, column=0, columnspan=2, padx=padx,
                              pady=pady)
 
         self.obs_labels = []
@@ -129,7 +130,7 @@ class MyGUI:
         self.obs_vars = []
         for i, label_name in enumerate(obs_label_names):
             self.obs_labels.append(tk.Label(self.root, text=label_name))
-            self.obs_labels[i].grid(row=i+15, column=0, padx=padx, pady=pady)
+            self.obs_labels[i].grid(row=i+16, column=0, padx=padx, pady=pady)
             if i == 4:
                 self.obs_vars.append(tk.StringVar())
                 self.psd_options = list(psd_dict.keys())
@@ -147,7 +148,7 @@ class MyGUI:
                     self.obs_vars.append(tk.DoubleVar())
                 self.obs_boxes.append(tk.Entry(self.root, width=10,
                                                textvariable=self.obs_vars[i]))
-            self.obs_boxes[i].grid(row=i+15, column=1, padx=padx, pady=pady)
+            self.obs_boxes[i].grid(row=i+16, column=1, padx=padx, pady=pady)
 
         self.obs_vars[0].set(60.0)
         self.obs_vars[1].set(1)
@@ -269,6 +270,7 @@ class MyGUI:
         self.sens_vars[1].set(self.sens.read_noise)
         self.sens_vars[2].set(self.sens.dark_current)
         self.sens_vars[4].set(self.sens.full_well)
+        self.sens_vars[5].set(np.inf)
         if self.sens_default.get() != 'Define New Sensor':
             self.sens_vars[3] = tk.StringVar()
             self.sens_vars[3].set('ARRAY')
@@ -389,7 +391,7 @@ class MyGUI:
             results = observatory.observe(spectrum)
             signal = int(results['signal'])
             noise = int(results['tot_noise'])
-            snr = signal / noise
+            snr = results['signal'] / results['tot_noise']
             phot_prec = 10 ** 6 / snr
             self.spec_results_data[0].config(text=format(signal, '4d'))
             self.spec_results_data[1].config(text=format(noise, '4d'))

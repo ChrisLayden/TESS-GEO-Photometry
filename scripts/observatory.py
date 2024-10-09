@@ -44,7 +44,7 @@ class Sensor(object):
 
     def __init__(self, pix_size, read_noise, dark_current,
                  qe=S.UniformTransmission(1), full_well=100000,
-                 intrapix_sigma=None):
+                 intrapix_sigma=np.inf):
         '''Initialize a Sensor object.
 
         Parameters
@@ -59,11 +59,11 @@ class Sensor(object):
             The sensor quantum efficiency as a function of wavelength
         full_well: int
             The full well (in e-) of each sensor pixel.
-        intrapix_sigma: float (default None)
+        intrapix_sigma: float (default np.inf)
             The standard deviation of the quantum efficiency across
             each individual pixel, in um, modeling this intrapixel
             response as a Gaussian. If not specified, the intrapixel
-            response is assumed to be flat.
+            response is assumed to be flat (so intrapix_sigma is infinite).
         '''
 
         self.pix_size = pix_size
@@ -72,6 +72,21 @@ class Sensor(object):
         self.full_well = full_well
         self.qe = qe
         self.intrapix_sigma = intrapix_sigma
+
+    @property
+    def qe(self):
+        return self._qe
+    
+    @qe.setter
+    def qe(self, value):
+        if isinstance(value, float) or isinstance(value, int):
+            if value < 0:
+                raise ValueError('The quantum efficiency must be positive.')
+            self._qe = S.UniformTransmission(value)
+        elif not isinstance(value, S.spectrum.SpectralElement):
+            raise ValueError('The quantum efficiency must be a constant or a pysynphot bandpass object.')
+        else:
+            self._qe = value
 
 
 class Telescope(object):
@@ -122,6 +137,21 @@ class Telescope(object):
         self.spot_size = spot_size
         self.plate_scale = 206265 / (self.focal_length * 10**4)
 
+    @property
+    def bandpass(self):
+        return self._bandpass
+    
+    @bandpass.setter
+    def bandpass(self, value):
+        if isinstance(value, float) or isinstance(value, int):
+            if value < 0:
+                raise ValueError('The quantum efficiency must be positive.')
+            self._bandpass = S.UniformTransmission(value)
+        elif not isinstance(value, S.spectrum.SpectralElement):
+            raise ValueError('The bandpass must be a constant or a pysynphot bandpass object.')
+        else:
+            self._bandpass = value
+
 
 class Observatory(object):
     '''Class specifying a complete observatory.'''
@@ -167,16 +197,13 @@ class Observatory(object):
                       np.all((self.sensor.qe.wave is None)) and
                       np.all(self.telescope.bandpass.wave is None))
         if all_flat_q:
-            warnings.warn('All bandpasses are flat. Setting pivot ' +
-                          'wavelength based on PYSYNPHOT wavelength ' +
-                          'limits (50-2600 nm).')
+            warnings.warn('All bandpasses are flat. Artifically setting ' +
+                          'lower and upper wavelength limits (50-2600 nm).')
             wavelengths = S.FlatSpectrum(1, fluxunits='flam').wave
             array_bp = S.ArrayBandpass(wavelengths, np.ones(len(wavelengths)))
             self.bandpass = self.bandpass * array_bp
         self.eff_area = self.bandpass * S.UniformTransmission(np.pi * self.telescope.diam ** 2 / 4)
-        # self.eff_area.throughput = self.eff_area.throughput * np.pi * self.telescope.diam ** 2 / 4
         self.lambda_pivot = self.bandpass.pivot()
-
         self.exposure_time = exposure_time
         self.num_exposures = num_exposures
         self.eclip_lat = eclip_lat
@@ -187,7 +214,9 @@ class Observatory(object):
         self.mean_pix_bkg = (self.bkg_per_pix() + self.sensor.dark_current *
                              self.exposure_time)
         self.jitter_psd = jitter_psd
-        # The 1-sigma jitter in arcseconds measured at a very fast frequency
+        # The total power in the jitter PSD, measured as a 1-sigma jitter,
+        # in arcseconds. The effective stability of images can be reduced
+        # by sampling at higher frequencies.
         if self.jitter_psd is not None:
             self.stability = integrated_stability(10,
                                                   jitter_psd[:, 0],
@@ -213,8 +242,7 @@ class Observatory(object):
             The spectrum for which to calculate the signal.
         '''
         S.setref(area=np.pi * self.telescope.diam ** 2 / 4)
-        obs_binset = self.binset(spectrum)
-        obs = S.Observation(spectrum, self.bandpass, binset=obs_binset,
+        obs = S.Observation(spectrum, self.bandpass, binset=self.bandpass.wave,
                             force='extrap')
         raw_rate = obs.countrate()
         signal = raw_rate * self.exposure_time
@@ -260,6 +288,7 @@ class Observatory(object):
             half_width = (np.pi * self.sensor.pix_size /
                           (2 * self.telescope.f_num *
                            self.lambda_pivot * 10 ** -4))
+            print(half_width)
             pix_frac = psfs.airy_ensq_energy(half_width)
         return pix_frac
 
@@ -408,7 +437,7 @@ class Observatory(object):
         intensity_grid = psf_grid * tot_signal
         return intensity_grid
 
-    def get_intrapix_grid(self, img_size=11, resolution=11, sigma=None):
+    def get_intrapix_grid(self, img_size=11, resolution=11, sigma=np.inf):
         '''Get the intrapixel response grid for the sensor.
 
         Parameters
@@ -417,7 +446,7 @@ class Observatory(object):
             The extent of the subarray, in pixels.
         resolution: int (default 11)
             The number of sub-pixels per pixel.
-        sigma: float (default None)
+        sigma: float (default np.inf)
             The standard deviation of the Gaussian intrapixel response, in um.
 
         Returns
@@ -425,18 +454,18 @@ class Observatory(object):
         intrapix_grid: array-like
             An array containing the intrapixel response across the subarray.
         '''
-        if sigma is None:
+        if sigma == np.inf:
             intrapix_grid = np.ones((img_size * resolution, img_size * resolution))
         else:
             intrapix_single = psfs.gaussian_psf(1, resolution, self.sensor.pix_size,
                                                 np.array([0, 0]),
-                                                np.array([[sigma, 0],[0,sigma]]))
+                                                np.array([[sigma ** 2, 0],[0, sigma ** 2]]))
             intrapix_single /= np.mean(intrapix_single)
             intrapix_grid = np.tile(intrapix_single, (img_size, img_size))
         return intrapix_grid
 
     def get_relative_signal_grid(self, intrapix_sigma, pos=np.array([0, 0]),
-                                 img_size=11, resolution=11):
+                                 img_size=11, resolution=21):
         '''Get relative signal with PSF centered at each subpixel.'''
         # Only effective if jitter is small relative to pixel scale.
         # Otherwise there's too much smearing.
@@ -649,6 +678,7 @@ class Observatory(object):
         intrapix_sigma = self.sensor.intrapix_sigma
         intrapix_grid = self.get_intrapix_grid(img_size, resolution, intrapix_sigma)
         rel_signal_grid = self.get_relative_signal_grid(intrapix_sigma, pos, img_size, resolution)
+        print(intrapix_sigma, resolution, np.min(rel_signal_grid))
         shifts_x = np.zeros(num_frames)
         center_fracs = np.zeros(num_frames)
         for i in range(num_frames):
@@ -663,7 +693,7 @@ class Observatory(object):
             shift_x = np.rint(np.mean(pointings[:,0]) / resolution).astype(int)
             shifts_x[i] = shift_x
             shift_y = np.rint(np.mean(pointings[:,1]) / resolution).astype(int)
-            print(shift_x, shift_y)
+            # print(shift_x, shift_y)
             frame = shift_values(frame, -shift_x, -shift_y)
             center_fracs[i] = frame.max() / frame.sum()
             frame_signal = np.sum(frame * opt_aper)
@@ -683,7 +713,7 @@ class Observatory(object):
             # plt.title(frame_signal)
             # plt.show()
             signal_list[i] = frame_signal
-        print(np.mean(center_fracs))
+        # print(np.mean(center_fracs))
         signal = np.mean(signal_list) * self.num_exposures
         jitter_noise = np.std(signal_list) * np.sqrt(self.num_exposures)
         shot_noise = np.sqrt(signal)
@@ -765,8 +795,8 @@ class Observatory(object):
             avg_grid *= intrapix_grid
             frame = avg_grid.reshape((img_size, resolution, img_size,
                                       resolution)).sum(axis=(1, 3))
-            # Find the average shift caused by the jitter and shift the frame
-            # by the same amount. On board, this would require a centroiding algorithm
+            # Find the average shift caused by the jitter in the frame and shift the frame
+            # back by that amount. On board, this would require a centroiding algorithm
             # or a feed-in from the star tracker.
             shift_x = np.rint(np.mean(pointings[:,0]) / resolution).astype(int)
             shift_y = np.rint(np.mean(pointings[:,1]) / resolution).astype(int)
@@ -781,12 +811,11 @@ class Observatory(object):
 if __name__ == '__main__':
     data_folder = os.path.dirname(__file__) + '/../data/'
     sensor_bandpass = S.FileBandpass(data_folder + 'imx455.fits')
-    telescope_bandpass = S.UniformTransmission(0.758)
     imx455 = Sensor(pix_size=2.74, read_noise=1, dark_current=0.005,
                     full_well=51000, qe=sensor_bandpass,
-                    intrapix_sigma=3)
+                    intrapix_sigma=6)
 
-    mono_tele_v10uvs = Telescope(diam=25, f_num=1.8, psf_type='airy', bandpass=telescope_bandpass)
+    mono_tele_v10uvs = Telescope(diam=25, f_num=1.8, psf_type='airy', bandpass=0.758)
     b_bandpass = S.ObsBandpass('johnson,b')
     r_bandpass = S.ObsBandpass('johnson,r')
     vis_bandpass = S.UniformTransmission(1.0)
@@ -800,17 +829,17 @@ if __name__ == '__main__':
     tess_geo_obs = Observatory(telescope=mono_tele_v10uvs, sensor=imx455,
                                filter_bandpass=r_bandpass, eclip_lat=90,
                                exposure_time=20, num_exposures=6,
-                               jitter_psd=tess_psd)
+                               jitter_psd=None)
     # tess_geo_obs = Observatory(telescope=mono_tele_v10uvs, sensor=imx455,
     #                            filter_bandpass=r_bandpass, eclip_lat=90,
     #                            exposure_time=0.2, num_exposures=6,
     #                            jitter_psd=np.array([freqs, psd]).T)
-    print(tess_geo_obs.stability)
-    print(tess_geo_obs.get_remaining_jitter())
-    print(tess_geo_obs.central_pix_frac())
-    print(tess_geo_obs.get_central_pix_avg())
-    results = tess_geo_obs.observe(flat_spec, num_frames=500, img_size=11, resolution=11, subpix_correct=True)
-    # print(results)
+    # print(tess_geo_obs.stability)
+    # print(tess_geo_obs.get_remaining_jitter())
+    # print(tess_geo_obs.central_pix_frac())
+    # print(tess_geo_obs.get_central_pix_avg())
+    results = tess_geo_obs.observe(flat_spec, num_frames=500, img_size=21, resolution=21, subpix_correct=True)
+    print(results)
     # imgs, aper = tess_geo_obs.get_images(flat_spec, num_images=1)
     # import matplotlib.pyplot as plt
     # plt.imshow(imgs[0])

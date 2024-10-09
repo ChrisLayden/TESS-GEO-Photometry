@@ -97,8 +97,8 @@ def gaussian_psf(num_pix, resolution, pix_size, mu, sigma):
         ensquared in the subarray.
     '''
     grid_points = num_pix * resolution
-    x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
-    y = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
+    x = np.linspace(-num_pix / 2.0, num_pix / 2.0, grid_points) * pix_size
+    y = np.linspace(-num_pix / 2.0, num_pix / 2.0, grid_points) * pix_size
     x, y = np.meshgrid(x, y)
     pos = np.empty(x.shape + (2,))
     pos[:, :, 0] = x
@@ -144,8 +144,8 @@ def airy_disk(num_pix, resolution, pix_size, mu, fnum, lam):
     '''
     lam /= 10 ** 4
     grid_points = num_pix * resolution
-    x = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
-    y = np.linspace(-num_pix / 2, num_pix / 2, grid_points) * pix_size
+    x = np.linspace(-num_pix / 2.0, num_pix / 2.0, grid_points) * pix_size
+    y = np.linspace(-num_pix / 2.0, num_pix / 2.0, grid_points) * pix_size
     x, y = np.meshgrid(x, y)
     pos = np.empty(x.shape + (1,))
     pos[:, :, 0] = np.sqrt((x - mu[0]) ** 2 + (y - mu[1]) ** 2)

@@ -188,6 +188,7 @@ if __name__ == '__main__':
     # plt.plot(qcmos_bandpass.wave / 10, qcmos_bandpass.throughput, label='qCMOS')
     # plt.plot(imx487_bandpass.wave / 10, imx487_bandpass.throughput, label='IMX 487')
     # plt.plot(ultrasat_qe.wave / 10, ultrasat_qe.throughput, label='ULTRASAT CMOS')
+    plt.plot(imx455_qe.wave / 10, imx455_qe.throughput, label='IMX 455')
     plt.plot(cosmos_qe.wave / 10, cosmos_qe.throughput, label='COSMOS')
     plt.plot(qcmos_qe.wave / 10, qcmos_qe.throughput, label='qCMOS')
     plt.plot(imx487_qe.wave / 10, imx487_qe.throughput, label='IMX 487')
