@@ -4,6 +4,7 @@ import os
 import tkinter as tk
 import pysynphot as S
 import numpy as np
+import matplotlib.pyplot as plt
 from spectra import *
 from observatory import Sensor, Telescope, Observatory
 from instruments import sensor_dict, telescope_dict, filter_dict
@@ -256,6 +257,12 @@ class MyGUI:
             self.spec_results_data.append(tk.Label(self.root, fg='red'))
             self.spec_results_data[i].grid(row=i+7, column=7, padx=padx, pady=pady)
 
+        # Make a button to plot mag vs noise
+        self.plot_button = tk.Button(self.root, text='Plot Magnitude vs. Noise',
+                                    command=self.plot_mag_vs_noise, fg='green')
+        self.plot_button.grid(row=13, column=6, columnspan=2, padx=padx,
+                              pady=pady)
+
         self.root.mainloop()
 
     def clear_results(self, *args):
@@ -406,6 +413,35 @@ class MyGUI:
             self.spec_results_data[5].config(text=format(results['n_aper'], '2d'))
         except ValueError as inst:
             messagebox.showerror('Value Error', inst)
+
+    def plot_mag_vs_noise(self):
+        mag_points = np.linspace(10, 20, 10)
+        ppm_points = np.zeros_like(mag_points)
+        ppm_points_source = np.zeros_like(mag_points)
+        ppm_points_read = np.zeros_like(mag_points)
+        ppm_points_bkg = np.zeros_like(mag_points)
+        ppm_points_dc = np.zeros_like(mag_points)
+        observatory = self.set_obs()
+        for i, mag in enumerate(mag_points):
+            spectrum = S.FlatSpectrum(mag, fluxunits='abmag')
+            results = observatory.observe(spectrum)
+            snr = results['signal'] / results['tot_noise']
+            phot_prec = 10 ** 6 / snr
+            ppm_points[i] = phot_prec
+            ppm_points_source[i] = 10 ** 6 * results['shot_noise'] / results['signal']
+            ppm_points_read[i] = 10 ** 6 * results['read_noise'] / results['signal']
+            ppm_points_bkg[i] = 10 ** 6 * results['bkg_noise'] / results['signal']
+            ppm_points_dc[i] = 10 ** 6 * results['dark_noise'] / results['signal']
+        plt.plot(mag_points, ppm_points, label='Total Noise')
+        plt.plot(mag_points, ppm_points_source, label='Shot Noise')
+        plt.plot(mag_points, ppm_points_read, label='Read Noise')
+        plt.plot(mag_points, ppm_points_bkg, label='Background Noise')
+        plt.plot(mag_points, ppm_points_dc, label='Dark Current Noise')
+        plt.xlabel('AB Magnitude')
+        plt.ylabel('Photometric Precision (ppm)')
+        plt.yscale('log')
+        plt.legend()
+        plt.show()
 
 
 MyGUI()

@@ -678,7 +678,7 @@ class Observatory(object):
         intrapix_sigma = self.sensor.intrapix_sigma
         intrapix_grid = self.get_intrapix_grid(img_size, resolution, intrapix_sigma)
         rel_signal_grid = self.get_relative_signal_grid(intrapix_sigma, pos, img_size, resolution)
-        print(intrapix_sigma, resolution, np.min(rel_signal_grid))
+        # print(intrapix_sigma, resolution, np.min(rel_signal_grid))
         shifts_x = np.zeros(num_frames)
         center_fracs = np.zeros(num_frames)
         for i in range(num_frames):
